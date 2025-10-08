@@ -28,7 +28,7 @@ Project code is proprietary and cannot be provided.
 
 Fully designed and developed.
 
-https://github.com/WardenDrew/portfolio/blob/main/scada-historian-and-alarm-dispatch/overview.png
+https://github.com/WardenDrew/portfolio/blob/main/scada-historian-and-alarm-dispatch
 
 # Unifi Network Access Control
 A NAC solution for a school using Unifi access points to be able to dynamically control VLAN assignment and allow staff to move devices between VLANS easily.
