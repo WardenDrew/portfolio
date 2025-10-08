@@ -1,0 +1,22 @@
+﻿@inject ProtectedLocalStorage protectedLocalStorage
+@inject WebAuthenticationService webAuth
+
+<CascadingValue Value="@this">
+    @ChildContent
+</CascadingValue>
+
+@code {
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    public bool Ready { get; set; }
+    public AccessToken? AccessToken { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        AccessToken = await webAuth.WebCheckLoggedInAsync(protectedLocalStorage);
+        Ready = true;
+        await InvokeAsync(StateHasChanged);
+    }
+}

@@ -1,0 +1,196 @@
+﻿@page "/login"
+@inject WebAuthenticationService webAuthService
+@inject ProtectedLocalStorage protectedLocalStorage
+@inject NavigationManager navigationManager
+
+<PageTitle>IronNAC</PageTitle>
+
+@if (AccessToken is null && !ChangePassword)
+{
+    <form @onsubmit="@(async _ => {await Debounce(); await TryLoginAsync();})">
+        <h5>Email Address:</h5>
+        <input class="w-100 me-2 fs-4 mb-3" type="email" @bind="Email" @ref="emailInputReference" autocapitalize="off" autocomplete="email" disabled="@debounce"/>
+
+        <h5>Password:</h5>
+        <input class="w-100 me-2 fs-4 mb-3" type="password" @bind="Password" autocomplete="current-password" disabled="@debounce"/>
+
+        @if (IncorrectLogin)
+        {
+            <div class="alert alert-danger" role="alert">
+                The login information was incorrect!
+            </div>
+        }
+
+        <button class="d-block w-100 btn btn-primary btn-lg mt-2 mb-3" disabled="@debounce">Login</button>
+        <button class="d-block w-100 btn btn-outline-info btn" type="button" @onclick="@(async _ => {await Debounce(); CancelLogin();})" disabled="@debounce">Cancel Login</button>
+    </form>
+}
+else if (AccessToken is not null && ChangePassword)
+{
+    <div class="alert alert-primary" role="alert">
+        Your password must be changed before you may continue!
+    </div>
+            
+    <form @onsubmit="@(async _ => {await Debounce(); await ChangePasswordAsync();})">
+        <h5>New Password:</h5>
+        <input class="w-100 me-2 fs-4 mb-3" type="password" @bind="NewPassword" @ref="newPasswordReference" autocomplete="new-password" disabled="@debounce" />
+
+        <h5>Confirm New Password:</h5>
+        <input class="w-100 me-2 fs-4 mb-3" type="password" @bind="NewPasswordConfirm" autocomplete="new-password" disabled="@debounce" />
+
+        @if (ChangePasswordFailure is not null)
+        {
+            <div class="alert alert-danger" role="alert">
+                @ChangePasswordFailure
+            </div>
+        }
+
+        <button class="d-block w-100 btn btn-primary btn-lg mt-2" disabled="@debounce">Change Password</button>
+    </form>
+}
+
+@code {
+    public string? Email { get; set; }
+    public string? Password { get; set; }
+
+    public string? NewPassword { get; set; }
+    public string? NewPasswordConfirm { get; set; }
+
+    public AccessToken? AccessToken { get; set; }
+
+    public bool IncorrectLogin { get; set; }
+    public bool ChangePassword { get; set; }
+    public bool DidFocusChangePassword { get; set; }
+    public string? ChangePasswordFailure { get; set; }
+
+    [SupplyParameterFromQuery(Name = "redirect")]
+    public string? Redirect { get; set; }
+
+    [SupplyParameterFromQuery(Name = "return")]
+    public string? Return { get; set; }
+
+    private ElementReference emailInputReference;
+    private ElementReference newPasswordReference;
+
+    private bool debounce;
+    public async Task Debounce()
+    {
+        debounce = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (ChangePassword && !DidFocusChangePassword)
+        {
+            await newPasswordReference.FocusAsync();
+            DidFocusChangePassword = true;
+        }
+
+        if (!firstRender) return;
+
+        AccessToken = await webAuthService.WebCheckLoggedInAsync(protectedLocalStorage);
+
+        if (AccessToken is not null)
+        {
+            if (Redirect is not null)
+            {
+                navigationManager.NavigateTo(Redirect);
+            }
+            else
+            {
+                navigationManager.NavigateTo("/");
+            }
+            return;
+        }
+
+        await emailInputReference.FocusAsync();
+    }
+
+    private async Task TryLoginAsync()
+    {
+        WebLoginResult loginResult = await webAuthService.WebLoginAsync(protectedLocalStorage, Email, Password);
+        IncorrectLogin = !loginResult.Success;
+        AccessToken = loginResult.AccessToken;
+        ChangePassword = loginResult.ChangePasswordRequired;
+        Password = null;
+
+        await InvokeAsync(StateHasChanged);
+
+        if (!IncorrectLogin && !ChangePassword)
+        {
+            if (Redirect is not null)
+            {
+                navigationManager.NavigateTo(Redirect);
+            }
+            else
+            {
+                navigationManager.NavigateTo("/");
+            }
+
+            return;
+        }
+
+        debounce = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ChangePasswordAsync()
+    {
+        if (AccessToken is null)
+        {
+            // Something went wrong, reload the page
+            navigationManager.Refresh(true);
+            debounce = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        if (NewPassword != NewPasswordConfirm)
+        {
+            ChangePasswordFailure = "Passwords do not match!";
+            debounce = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        if (!webAuthService.CheckComplexity(NewPassword))
+        {
+            ChangePasswordFailure = "Password does not minimum requirements! Password must be at least 8 characters long!";
+            debounce = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        bool status = await webAuthService.SetPasswordAsync(AccessToken.Email, NewPassword);
+
+        if (!status)
+        {
+            ChangePasswordFailure = "Failed to set the new password. Please contact support!";
+            debounce = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        if (Redirect is not null)
+        {
+            navigationManager.NavigateTo(Redirect);
+        }
+        else
+        {
+            navigationManager.NavigateTo("/");
+        }
+    }
+
+    public void CancelLogin()
+    {
+        if (Return is not null)
+        {
+            navigationManager.NavigateTo(Return);
+        }
+        else
+        {
+            navigationManager.NavigateTo("/");
+        }
+    }
+}

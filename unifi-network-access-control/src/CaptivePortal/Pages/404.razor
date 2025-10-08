@@ -1,0 +1,23 @@
+﻿@page "/404"
+@inject NavigationManager nav
+@inject IJSRuntime js
+
+<PageTitle>Page not found</PageTitle>
+
+<div class="alert alert-warning" role="alert">
+    <h1 class="text-center">404</h1>
+    <h3 class="text-center">Sorry but that page doesn&apos;t exist!</h3>
+</div>
+
+<button class="btn btn-outline-primary btn-lg mb-3" @onclick="@(async _ => await js.InvokeVoidAsync("history.back"))">
+    <div class="d-flex align-items-center justify-content-center">
+        <span class="mdi mdi-history mdi-36px"></span>
+        <h4 class="ms-2 mb-1">Go Back</h4>
+    </div>
+</button>
+<button class="btn btn-outline-success btn-lg" @onclick="@(_ => nav.NavigateTo("/"))">
+    <div class="d-flex align-items-center justify-content-center">
+        <span class="mdi mdi-home mdi-36px"></span>
+        <h4 class="ms-2 mb-1">Go Home</h4>
+    </div>
+</button>

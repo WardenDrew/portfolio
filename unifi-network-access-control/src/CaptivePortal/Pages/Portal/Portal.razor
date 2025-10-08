@@ -1,0 +1,160 @@
+﻿@page "/portal"
+@implements IDisposable
+@inject NavigationManager navigationManager
+@inject RadiusDisconnectorService disconnector
+@inject IHttpContextAccessor httpContextAccessor
+@inject ProtectedLocalStorage protectedLocalStorage
+@inject IDbContextFactory<IronNacDbContext> dbFactory
+@inject DataRefreshNotificationService dataRefresh
+
+<PageTitle>Captive Portal</PageTitle>
+
+@if (Device is null)
+{
+    <h5 class="text-center">Detecting your Device Connection</h5>
+    <div class="d-flex w-100 justify-content-center mt-3">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else
+{
+    @if (!Device.Authorized || Device.AuthorizedUntil <= DateTime.UtcNow)
+    {
+        <h5 class="text-center">This device is not yet registered</h5>
+        <button class="btn btn-primary btn-lg mt-2 mb-3" @onclick="@(async _ => {await Debounce(); await StartRegisterStaffAsync();})" disabled="@debounce">
+            I am a Staff or Faculty Member
+        </button>
+        <button class="btn btn-primary btn-lg" @onclick="@(async _ => {await Debounce(); await StartRegisterGuestAsync();})" disabled="@debounce">
+            I am a Student or Guest
+        </button>
+    }
+    else
+    {
+        <p>This device is authorized until @Device.AuthorizedUntil</p>
+        <button class="btn btn-primary" @onclick="@(async _ => {await Debounce(); await DisconnectDevice(Device);})" disabled="@debounce">Reconnect Device</button>
+        <button class="btn btn-danger" @onclick="@(async _ => {await Debounce(); await RemoveDevice(Device);})" disabled="@debounce">Remove Device Authorization</button>
+    }
+
+    <hr />
+
+    <h5>Your IP Address:</h5>
+    <div class="w-100 d-flex mb-3">
+        <input class="flex-grow-1 me-2 fs-4" type="text" value="@(DetectedIPAddress)" disabled />
+        <button class="btn btn-outline-info"><span class="mdi mdi-content-copy mdi-24px"></span></button>
+    </div>
+
+    <h5>Your MAC Address:</h5>
+    <div class="w-100 d-flex">
+        <input class="flex-grow-1 me-2 fs-4" type="text" value="@(Device.DeviceMac?.ToUpper())" disabled />
+        <button class="btn btn-outline-info"><span class="mdi mdi-content-copy mdi-24px"></span></button>
+    </div>
+}
+
+@code {
+
+    [SupplyParameterFromQuery(Name="redirect")]
+    public string? Redirect { get; set; }
+
+    public IPAddress? DetectedIPAddress { get; set; }
+    public Device? Device { get; set; }
+
+    private Timer? timer;
+
+    private bool debounce;
+    public async Task Debounce()
+    {
+        debounce = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        dataRefresh.DeviceDetailsNotification += async (sender, eventArgs) =>
+        {
+            await Refresh();
+            await InvokeAsync(StateHasChanged);
+        };
+
+        timer = new(async _ =>
+        {
+            await PollForDeviceInfo();
+        }, null, 0, 1000);
+    }
+
+    public void Dispose()
+    {
+        timer?.Dispose();
+    }
+
+    public void ReloadPage()
+    {
+        navigationManager.Refresh(true);
+    }
+
+    private async Task PollForDeviceInfo()
+    {
+        await Refresh();
+        await InvokeAsync(StateHasChanged);
+
+        if (Device is null) return;
+
+        timer?.Change(Timeout.Infinite, Timeout.Infinite);
+        timer?.Dispose();
+    }
+
+    private async Task Refresh()
+    {
+        if (DetectedIPAddress is null)
+        {
+            DetectedIPAddress = httpContextAccessor.HttpContext?.Connection?.RemoteIpAddress;
+            await InvokeAsync(StateHasChanged);
+            if (DetectedIPAddress is null) return;
+        }
+
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        Device = await db.Devices
+            .AsNoTracking()
+            .Where(x => x.DetectedDeviceIpAddress == DetectedIPAddress.ToString())
+            .FirstOrDefaultAsync();
+    }
+
+    private async Task StartRegisterStaffAsync()
+    {
+        if (Device is null) return;
+
+        await protectedLocalStorage.SetAsync(nameof(Database.Entities.Device), Device.Id);
+        navigationManager.NavigateTo("/portal/user");
+    }
+
+    private async Task StartRegisterGuestAsync()
+    {
+        if (Device is null) return;
+
+        await protectedLocalStorage.SetAsync(nameof(Database.Entities.Device), Device.Id);
+        navigationManager.NavigateTo("/portal/guest");
+    }
+
+    private Task DisconnectDevice(Device device)
+    {
+        return disconnector.Disconnect(device);
+    }
+
+    private async Task RemoveDevice(Device device)
+    {
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        await db.Devices
+            .Where(x => x.Id == device.Id)
+            .ExecuteDeleteAsync();
+
+        dataRefresh.DeviceDetailsNotify();
+        dataRefresh.NetworkUsageNotify();
+
+        await DisconnectDevice(device);
+    }
+}

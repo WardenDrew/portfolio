@@ -1,0 +1,16 @@
+﻿{
+  "profiles": {
+    "API": {
+      "commandName": "Project",
+      "commandLineArgs": "--env=\"../../secrets/local.env\"",
+      "dotnetRunMessages": true,
+      "externalUrlConfiguration": true
+    },
+    "Migrate": {
+      "commandName": "Project",
+      "commandLineArgs": "migrate --env=\"../../secrets/local.env\"",
+      "dotnetRunMessages": true,
+      "externalUrlConfiguration": true
+    }
+  }
+}

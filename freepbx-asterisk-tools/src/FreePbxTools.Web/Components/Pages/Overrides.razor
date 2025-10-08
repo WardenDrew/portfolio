@@ -1,0 +1,64 @@
+@page "/overrides"
+@layout AuthenticatedLayout
+
+<PageTitle>CCS Bell Schedule - Overrides</PageTitle>
+
+<div class="container">
+    <h2 class="text-center">
+        <iconify-icon icon="mdi:calendar-alert" inline/>
+        Overrides
+    </h2>
+
+    <table class="table table-striped table-sm">
+        <thead>
+        <tr>
+            <th scope="col">
+                Date
+            </th>
+            <th scope="col">
+                Reason
+            </th>
+            <th scope="col">
+                Schedule
+            </th>
+            <th scope="col" class="text-end" style="width: 12rem">
+                <button class="btn btn-primary" @onclick="@(() => _navigation.NavigateTo("/overrides/new"))">
+                    <iconify-icon icon="mdi:plus" inline/>
+                    New Override
+                </button>
+            </th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (SettingsService.OverrideModel overrideEntry in _settings.Staged.Overrides)
+        {
+            <tr>
+                <td class="align-middle">
+                    @overrideEntry.Date
+                </td>
+                <td class="align-middle">
+                    @overrideEntry.Reason
+                </td>
+                <td class="align-middle">
+                    <span>@(_settings.Staged.Schedules.Where(x => x.Id == overrideEntry.Schedule).FirstOrDefault()?.Name)</span>
+                    <span class="text-muted">@overrideEntry.Schedule</span>
+                </td>
+                <td class="text-end" style="width: 12rem">
+                    <button class="btn btn-outline-warning" @onclick="@(() => _navigation.NavigateTo($"/overrides/{overrideEntry.Id}"))">
+                        <iconify-icon icon="mdi:pencil" inline/>
+                        Edit
+                    </button>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+    @if (_settings.Staged.Overrides.Count == 0)
+    {
+        <p class="text-center">No data</p>
+    }
+</div>
+
+@code {
+
+}

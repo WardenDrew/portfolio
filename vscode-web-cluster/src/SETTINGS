@@ -1,0 +1,19 @@
+#!/bin/bash
+
+BASE_DOCKER_NAME="code"
+
+# Uncomment to expose the caddy reverse proxy on the host
+# Comment if you are using another proxy in front of this proxy (I.E for SSL Termination or FQDNs)
+PROXY_PORT=8080
+
+TEACHERS=(
+  redacted1
+  redacted2
+)
+
+STUDENTS=(
+  redacted3
+  redacted4
+  redacted5
+  redacted6
+)

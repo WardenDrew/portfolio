@@ -1,0 +1,280 @@
+﻿@page "/portal/user"
+@using CaptivePortal.Components.Forms
+@inject NavigationManager navigationManager
+@inject RadiusDisconnectorService disconnector
+@inject WebAuthenticationService webAuthService
+@inject ProtectedLocalStorage protectedLocalStorage
+@inject IDbContextFactory<IronNacDbContext> dbFactory
+@inject DataRefreshNotificationService dataRefresh
+
+<PageTitle>Captive Portal > Staff</PageTitle>
+
+<CheckPermissions Level="PermissionLevel.User" Return="/portal">
+    @if (device is not null && AuthenticateUser?.AccessToken is not null)
+    {
+        @if (authorizedUntil is null && registerFailure is null)
+        {
+            <h4 class="text-center">Hello @AuthenticateUser.AccessToken.Name</h4>
+        
+            @if (!nickNameSet && !nickNameCustom)
+            {
+                <h5 class="text-center">Select your device type</h5>
+                <div class="d-flex justify-content-evenly">
+                    <button class="btn btn-outline-info m-2" style="width: 120px; height: 120px;"
+                        @onclick="@(_ => {nickName = "Laptop"; nickNameSet = true;})"
+                        disabled="@debounce"
+                    >
+                        <span class="mdi mdi-laptop mdi-48px"></span><br/>
+                        <span>Laptop</span>
+                    </button>
+                    <button class="btn btn-outline-info m-2" style="width: 120px; height: 120px;"
+                        @onclick="@(_ => {nickName = "Desktop"; nickNameSet = true;})"
+                        disabled="@debounce"
+                    >
+                        <span class="mdi mdi-monitor mdi-48px"></span><br />
+                        <span>Desktop</span>
+                    </button>
+                </div>
+                <div class="d-flex justify-content-evenly mb-4">
+                    <button class="btn btn-outline-info m-2" style="width: 120px; height: 120px;"
+                        @onclick="@(_ => {nickName = "Phone"; nickNameSet = true;})"
+                        disabled="@debounce"
+                    >
+                        <span class="mdi mdi-cellphone mdi-48px"></span><br />
+                        <span>Phone</span>
+                    </button>
+                    <button class="btn btn-outline-info m-2" style="width: 120px; height: 120px;"
+                        @onclick="@(_ => {nickNameCustom = true;})"
+                        disabled="@debounce"
+                    >
+                        <span class="mdi mdi-tag-text-outline mdi-48px"></span><br />
+                        <span>Other</span>
+                    </button>
+                </div>
+            }
+            else if (!nickNameSet)
+            {
+                <label>Name This Device:</label>
+                <form @onsubmit="@(_ => {nickNameSet = true;})">
+                    <input class="w-100 me-2 fs-4 mb-3" type="text" @bind="nickName" @ref="nickNameInputReference" disabled="@debounce"/>
+                    <button class="d-block w-100 btn btn-primary btn-lg mb-3" disabled="@debounce">Choose Name</button>
+                </form>
+
+                <button class="btn btn-outline-info mt-3"
+                    @onclick="@(_ => {nickNameSet = false; nickNameCustom = false; nickName = null;})"
+                    disabled="@debounce"
+                >
+                    Return To Select A Device Type
+                </button>
+            }
+            else if (selectedNetworkGroup is null ||
+                (!selectedNetworkGroup.IsPool && selectedNetwork is null))
+            {
+                <h5 class="text-center">Select your Network</h5>
+
+                @if (!debounce)
+                {
+                    <NetworkSelection 
+                        ShowAllNetworks="AuthenticateUser.AccessToken.PermissionLevel == PermissionLevel.Admin"
+                        ShowForUserId="AuthenticateUser.AccessToken.UserId"
+                        SelectedNetworkGroupChanged="@(e => { SelectedNetworkGroupChanged(e);})"
+                        SelectedNetworkChanged="@(e => { SelectedNetworkChanged(e);})"
+                    />
+                }
+
+                @if (selectedNetworkGroup is null)
+                {
+                    <button class="btn btn-outline-info mt-3"
+                        @onclick="@(_ => {nickNameSet = false; nickNameCustom = false; nickName = null;})"
+                        disabled="@debounce"
+                    >
+                        Return To Select A Device Type
+                    </button>
+                }
+            }
+            else
+            {
+                <div class="alert alert-warning" role="alert">
+                    <h5>Heads Up!</h5>
+                    <p>Registering your device will disconnect it from the Wifi network. Most devices will reconnect automatically.</p>
+                    <p>If your device does not reconnect automatically, you will need to manually reconnect to the Wifi network!</p>
+                </div>
+
+                <button class="btn btn-primary btn-lg mb-3"
+                    @onclick="@(async _ => {await Debounce(); await RegisterAsync();})"
+                    disabled="@debounce"
+                >
+                    Register this Device
+                </button>
+
+                <button class="btn btn-outline-info mt-3"
+                    @onclick="@(_ => {selectedNetworkGroup = null; selectedNetwork = null;})"
+                    disabled="@debounce"
+                >
+                    Return To Select A Network
+                </button>
+            }
+
+            <button class="btn btn-outline-warning mt-3" @onclick="@(async _ => {await Debounce(); DoLogout(); })" disabled="@debounce">Not You? Logout</button>
+        }
+        else
+        {
+            <h5 class="text-center">This device is authorized until <code>@authorizedUntil</code></h5>
+
+            @if (registerFailure is not null)
+            {
+                <div class="alert alert-danger" role="alert">
+                    @registerFailure
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-info" role="alert">
+                    You may close this browser window. If your device did not automatically reconnect to the Wifi network, please do so now.
+                </div>
+            }
+        }
+    }
+</CheckPermissions>
+
+@code {
+    [CascadingParameter]
+    public AuthenticateUser? AuthenticateUser { get; set; }
+
+    private Device? device;
+
+    private NetworkGroup? selectedNetworkGroup;
+    private Network? selectedNetwork;
+
+    private bool nickNameSet;
+    private bool nickNameCustom;
+    private string? nickName;
+    private ElementReference nickNameInputReference;
+    private bool hasFocusedNickNameInput;
+
+    private DateTime? authorizedUntil;
+    private string? registerFailure;
+
+    private bool debounce;
+    public async Task Debounce()
+    {
+        debounce = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (nickNameCustom && !hasFocusedNickNameInput)
+        {
+            await nickNameInputReference.FocusAsync();
+            hasFocusedNickNameInput = true;
+        }
+
+        if (!firstRender) return;
+
+        var deviceResult = await protectedLocalStorage.GetAsync<int>(nameof(Database.Entities.Device));
+        if (!deviceResult.Success)
+        {
+            navigationManager.NavigateTo("/portal");
+            return;
+        }
+
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        device = await db.Devices
+            .AsNoTracking()
+            .Where(x => x.Id == deviceResult.Value)
+            .FirstOrDefaultAsync();
+        if (device is null)
+        {
+            navigationManager.NavigateTo("/portal");
+            return;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void SelectedNetworkGroupChanged(NetworkGroup? networkGroup)
+    {
+        this.selectedNetworkGroup = networkGroup;
+        debounce = false;
+        StateHasChanged();
+    }
+
+    private void SelectedNetworkChanged(Network? network)
+    {
+        this.selectedNetwork = network;
+        debounce = false;
+        StateHasChanged();
+    }
+
+    private async Task RegisterAsync()
+    {
+        if (this.device is null ||
+            selectedNetworkGroup is null ||
+            AuthenticateUser?.AccessToken is null)
+        {
+            return;
+        }
+
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        authorizedUntil = DateTime.UtcNow.AddDays(30);
+
+        await db.Devices
+            .Where(x => x.Id == this.device.Id)
+            .ExecuteUpdateAsync(x => x
+                .SetProperty(p => p.UserId, AuthenticateUser.AccessToken.UserId)
+                .SetProperty(p => p.NickName, nickName)
+                .SetProperty(p => p.Authorized, true)
+                .SetProperty(p => p.AuthorizedUntil, authorizedUntil)
+            );
+
+        await db.DeviceNetworks
+            .Where(x => x.DeviceId == device.Id)
+            .ExecuteDeleteAsync();
+
+        if (selectedNetwork is null && !selectedNetworkGroup.IsPool)
+            return;
+        if(selectedNetwork is null)
+        {
+            selectedNetwork = await db.Networks
+                .Where(x => x.NetworkGroupId == selectedNetworkGroup.Id)
+                .Where(x => x.DeviceNetworks.Count < x.Capacity)
+                .FirstOrDefaultAsync();
+        }
+        if (selectedNetwork is null)
+            return;
+
+        DeviceNetwork deviceNetwork = new()
+        {
+            DeviceId = device.Id,
+            NetworkId = selectedNetwork.Id
+        };
+        db.Add(deviceNetwork);
+        await db.SaveChangesAsync();
+
+        await protectedLocalStorage.DeleteAsync(nameof(device));
+
+        dataRefresh.DeviceDetailsNotify();
+        dataRefresh.NetworkUsageNotify();
+
+        Device? reloadedDevice = await db.Devices
+            .AsNoTracking()
+            .Where(x => x.Id == this.device.Id)
+            .FirstOrDefaultAsync();
+
+        // This must end this method as the disconnect will kill the blazor circuit
+        if (reloadedDevice is null ||
+            !await disconnector.Disconnect(reloadedDevice))
+        {
+            registerFailure = "Could not automatically disconnect and reconnect your device! Please manually disconnect and reconnect to the Wifi Network!";
+        }
+    }
+
+    private void DoLogout()
+    {
+        navigationManager.NavigateTo("/logout?redirect=%2Fportal");
+        return;
+    }
+}

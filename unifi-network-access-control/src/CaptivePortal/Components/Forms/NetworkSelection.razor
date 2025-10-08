@@ -1,0 +1,234 @@
+﻿@inject IDbContextFactory<IronNacDbContext> dbFactory
+@inject DataRefreshNotificationService dataRefresh
+
+@if (selectedNetworkGroup is null)
+{
+    <h5 class="text-center mt-3">Available Network Groups</h5>
+    <p>Please select a network group. Non-pooled groups will allow for specific network selection, while pooled groups will assign your device to any open network.</p>
+
+    @if (!networkGroups.Any())
+    {
+        <div class="alert alert-warning">
+            <h5>No Networks Groups Available</h5>
+            <p>At this time, all available network are at capacity. Please contact the IT support team for help!</p>
+        </div>
+    }
+    @foreach (NetworkGroup networkGroup in networkGroups)
+    {
+        <div class="card p-3 mb-3 user-select-none" @onclick="@(_ => SelectNetworkGroup(networkGroup))" style="cursor: pointer;">
+            <h3>@networkGroup.Name</h3>
+            @if (!string.IsNullOrWhiteSpace(networkGroup.Description))
+            {
+                <p class="mt-2 mb-1">@networkGroup.Description</p>
+            }
+            <p class="mt-2 mb-1">
+                Pooled: <code>@(networkGroup.IsPool ? "YES" : "NO")</code><br />
+                Networks: <code>@networkGroup.Networks.Count</code><br />
+                <code>@(networkGroupUsage.GetValueOrDefault(networkGroup.Id))</code> of <code>@(networkGroupCapacity.GetValueOrDefault(networkGroup.Id))</code> addresses in use
+            </p>
+            <div class="d-flex align-items-center">
+                <div class="progress flex-grow-1" style="height: 32px;">
+                    <div class="progress-bar overflow-visible" style="@($"width: {GetGroupUsagePercentage(networkGroup.Id)};")">
+                        <span class="p-2 fs-5">@(GetGroupUsagePercentage(networkGroup.Id)) Full</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+else if (!selectedNetworkGroup.IsPool && selectedNetwork is null)
+{
+    <h5 class="text-center mt-3">Networks in "@selectedNetworkGroup.Name"</h5>
+    <p>You have selected a non-pooled group. Please select a network:</p>
+    
+    @if (!selectedNetworkGroup.Networks.Any())
+    {
+        <div class="alert alert-warning">
+            <h5>No Networkss Available</h5>
+            <p>At this time, all available network are at capacity. Please contact the IT support team for help!</p>
+        </div>
+    }
+    @foreach (Network network in selectedNetworkGroup.Networks)
+    {
+        <div class="card p-3 mb-3" @onclick="@(_ => SelectNetwork(network))">
+            <h3>@network.Name</h3>
+            @if (!string.IsNullOrWhiteSpace(network.Description))
+            {
+                <p class="mt-2 mb-1">@network.Description</p>
+            }
+            <p class="mt-2 mb-1">
+                Subnet: <code>@network.NetworkAddress</code><br />
+                <code>@(networkUsage.GetValueOrDefault(network.Id))</code> of <code>@(network.Capacity)</code> addresses in use
+            </p>
+            <div class="d-flex align-items-center">
+                <div class="progress flex-grow-1" style="height: 32px;">
+                    <div class="progress-bar overflow-visible" style="@($"width: {GetNetworkUsagePercentage(network.Id, network.Capacity)};")">
+                        <span class="p-2 fs-5">@(GetNetworkUsagePercentage(network.Id, network.Capacity)) Full</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <button class="btn btn-outline-info" @onclick="async _ => {await SetNetworkGroup(null); await SetNetwork(null);}">Return To Select A Network</button>
+}
+
+@code {
+    [Parameter]
+    public bool ShowAllNetworks { get; set; }
+
+    [Parameter]
+    public int? ShowForUserId { get; set; }
+
+    private List<NetworkGroup> networkGroups = new();
+    private Dictionary<int, int> networkGroupCapacity = new();
+    private Dictionary<int, int> networkGroupUsage = new();
+    private Dictionary<int, int> networkCapacity = new();
+    private Dictionary<int, int> networkUsage = new();
+
+    private NetworkGroup? selectedNetworkGroup;
+    [Parameter]
+    public EventCallback<NetworkGroup> SelectedNetworkGroupChanged { get; set; }
+    private async Task SetNetworkGroup(NetworkGroup? newNetworkGroup)
+    {
+        selectedNetworkGroup = newNetworkGroup;
+        await SelectedNetworkGroupChanged.InvokeAsync(newNetworkGroup);
+    }
+
+    private Network? selectedNetwork;
+    [Parameter]
+    public EventCallback<Network> SelectedNetworkChanged { get; set; }
+    private async Task SetNetwork(Network? newNetwork)
+    {
+        selectedNetwork = newNetwork;
+        await SelectedNetworkChanged.InvokeAsync(newNetwork);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        dataRefresh.NetworkUsageNotification += async (sender, eventArgs) =>
+        {
+            await Refresh();
+            await InvokeAsync(StateHasChanged);
+        };
+
+        dataRefresh.UserDetailsNotification += async (sender, eventArgs) =>
+        {
+            await Refresh();
+            await InvokeAsync(StateHasChanged);
+        };
+
+        await Refresh();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Refresh()
+    {
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        if (ShowAllNetworks)
+        {
+            networkGroups = await db.NetworkGroups
+                .Where(x => !x.Registration)
+                .Include(x => x.Networks)
+                .ToListAsync();
+        }
+        else if (ShowForUserId is null)
+        {
+            return;
+        }
+        else
+        {
+            networkGroups = await db.UserNetworkGroups
+                .Where(x => x.UserId == ShowForUserId)
+                .Include(x => x.NetworkGroup)
+                    .ThenInclude(x => x.Networks)
+                .Select(x => x.NetworkGroup)
+                .ToListAsync();
+        }
+
+        networkGroupCapacity = (await db.Networks
+            .GroupBy(x => x.NetworkGroupId)
+            .Select(x => new KeyValuePair<int, int>(x.Key, x.Sum(y => y.Capacity)))
+            .ToListAsync())
+            .ToDictionary();
+
+        networkGroupUsage = (await db.Networks
+            .GroupBy(x => x.NetworkGroupId)
+            .Select(x => new KeyValuePair<int, int>(x.Key, x.Sum(y => y.DeviceNetworks.Count)))
+            .ToListAsync())
+            .ToDictionary();
+
+        networkUsage = (await db.DeviceNetworks
+            .GroupBy(x => x.NetworkId)
+            .Select(x => new KeyValuePair<int, int>(x.Key, x.Count()))
+            .ToListAsync())
+            .ToDictionary();
+
+        if (selectedNetworkGroup is not null)
+        {
+            int capacity = networkGroupCapacity.GetValueOrDefault(selectedNetworkGroup.Id);
+            int usage = networkGroupUsage.GetValueOrDefault(selectedNetworkGroup.Id);
+            if (usage >= capacity)
+            {
+                await SetNetwork(null);
+                await SetNetworkGroup(null);
+            }
+        }
+
+        if (selectedNetwork is not null)
+        {
+            int usage = networkUsage.GetValueOrDefault(selectedNetwork.Id);
+            if (usage >= selectedNetwork.Capacity)
+            {
+                await SetNetwork(null);
+            }
+        }
+    }
+
+    private string GetGroupUsagePercentage(int networkGroupId)
+    {
+        int capacity = networkGroupCapacity.GetValueOrDefault(networkGroupId);
+        int usage = networkGroupUsage.GetValueOrDefault(networkGroupId);
+        if (usage == 0) return "0%";
+        if (capacity == usage) return "100%";
+
+        int percentage = Convert.ToInt32(Math.Ceiling((float)usage * 100f / (float)capacity));
+        // If we rounded up to 100% but aren't actually capacity == usage then set to 99%
+        if (percentage == 100) percentage = 99;
+
+        return $"{percentage}%";
+    }
+
+    private string GetNetworkUsagePercentage(int networkId, int capacity)
+    {
+        int usage = networkGroupUsage.GetValueOrDefault(networkId);
+        if (usage == 0) return "0%";
+        if (capacity == usage) return "100%";
+
+        int percentage = Convert.ToInt32(Math.Ceiling((float)usage * 100f / (float)capacity));
+        // If we rounded up to 100% but aren't actually capacity == usage then set to 99%
+        if (percentage == 100) percentage = 99;
+
+        return $"{percentage}%";
+    }
+
+    private async Task SelectNetworkGroup(NetworkGroup networkGroup)
+    {
+        int capacity = networkGroupCapacity.GetValueOrDefault(networkGroup.Id);
+        int usage = networkGroupUsage.GetValueOrDefault(networkGroup.Id);
+        if (usage >= capacity) return;
+
+        await SetNetworkGroup(networkGroup);
+    }
+
+    private async Task SelectNetwork(Network network)
+    {
+        int usage = networkUsage.GetValueOrDefault(network.Id);
+        if (usage >= network.Capacity) return;
+
+        await SetNetwork(network);
+    }
+}

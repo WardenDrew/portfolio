@@ -1,0 +1,238 @@
+﻿@using CaptivePortal.Database.Entities
+@using System.Net
+@using System.Text.RegularExpressions
+
+@if (Network is not null)
+{
+    <form class="d-block w-100" @onsubmit="async _ => await Submit()">
+        <h5>Network Name</h5>
+        <input class="d-block w-100" type="text" @bind="Network.Name" @ref="firstField" />
+
+        <h5 class="mt-3">Network Address</h5>
+        @if (networkAddressValidation is not null)
+        {
+            <div class="alert alert-danger">@networkAddressValidation</div>
+        }
+        <label class="d-block">The network address in 0.0.0.0/0 format. Supports CIDRs from /16 to /30 </label>
+        <input class="d-block w-100" type="text" @bind="Network.NetworkAddress"/>
+
+        <h5 class="mt-3">Gateway Address</h5>
+        @if (gatewayAddressValidation is not null)
+        {
+            <div class="alert alert-danger">@gatewayAddressValidation</div>
+        }
+        <label class="d-block">The gateway address in 0.0.0.0 format</label>
+        <input class="d-block w-100" type="text" @bind="Network.GatewayAddress" />
+
+        <h5 class="mt-3">VLAN Tag</h5>
+        @if (vlanValidation is not null)
+        {
+            <div class="alert alert-danger">@vlanValidation</div>
+        }
+        <label class="d-block">The VLAN tag number between 1 and 4094</label>
+        <input class="d-block w-100" type="number" pattern="[0-9]*" inputmode="numeric" @bind="BindVlan" />
+
+        <h5 class="mt-3">Capacity</h5>
+        @if (capacityValidation is not null)
+        {
+            <div class="alert alert-danger">@capacityValidation</div>
+        }
+        <label class="d-block">The number of devices this network can have assigned to it</label>
+        <input class="d-block w-100" type="number" pattern="[0-9]*" inputmode="numeric" @bind="BindCapacity" />
+
+        <div class="d-flex justify-content-between mt-3">
+            @if (OnDelete.HasDelegate)
+            {
+                <div>
+                    <button class="d-block btn btn-danger" type="button" @onclick="async _ => await ResetFocus(OnDelete)">Delete</button>
+                </div>
+            }
+            <div class="flex-grow-1 d-flex justify-content-end">
+                <button class="d-block btn btn-primary" type="submit">Save</button>
+                @if (OnCancel.HasDelegate)
+                {
+                    <button class="d-block btn btn-outline-secondary ms-2" type="button" @onclick="async _ => await ResetFocus(OnCancel)">Cancel</button>
+                }
+            </div>
+        </div>
+        
+    </form>
+}
+
+@code {
+    [Parameter]
+    public Network? Network { get; set; }
+
+    [Parameter] 
+    public EventCallback OnSubmit { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    [Parameter]
+    public EventCallback OnDelete { get; set; }
+
+    private ElementReference firstField;
+    private bool didFocusFirstField;
+
+    private string? networkAddressValidation;
+    private string? gatewayAddressValidation;
+    private string? vlanValidation;
+    private string? capacityValidation;
+
+    private Dictionary<int, int> CidrMaxCapacity = new(){
+        { 16, 65534 },
+        { 17, 32766 },
+        { 18, 16382 },
+        { 19, 8190 },
+        { 20, 4094 },
+        { 21, 2046 },
+        { 22, 1022 },
+        { 23, 510 },
+        { 24, 254 },
+        { 25, 126 },
+        { 26, 62 },
+        { 27, 30 },
+        { 28, 14 },
+        { 29, 6 },
+        { 30, 2 }
+    };
+
+    public string BindVlan
+    {
+        get => Network?.Vlan.ToString() ?? String.Empty;
+        set
+        {
+            if (Network is not null &&
+                int.TryParse(value, out int val))
+            {
+                Network.Vlan = val;
+            }
+        }
+    }
+
+    public string BindCapacity
+    {
+        get => Network?.Capacity.ToString() ?? String.Empty;
+        set
+        {
+            if (Network is not null &&
+                int.TryParse(value, out int val))
+            {
+                Network.Capacity = val;
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Network is not null &&
+            didFocusFirstField == false)
+        {
+            didFocusFirstField = true;
+            await firstField.FocusAsync();
+        }
+    }
+
+    private async Task Submit()
+    {
+        if (Network is null) return;
+
+        ValidateNetworkAddress();
+        ValidateGatewayAddress();
+        ValidateVlan();
+        ValidateCapacity();
+
+        if (networkAddressValidation is not null ||
+            gatewayAddressValidation is not null ||
+            vlanValidation is not null ||
+            capacityValidation is not null)
+        {
+            return;
+        }
+
+        if (Network.Description is not null)
+        {
+            Network.Description = Regex.Replace(Network.Description, @"\r\n?|\n", " ");
+        }
+
+        await ResetFocus(OnSubmit);
+    }
+
+    private void ValidateNetworkAddress()
+    {
+        if (Network is null) return;
+
+        string[] networkAddressParts = Network.NetworkAddress.Split('/');
+        if (networkAddressParts.Length != 2 ||
+            !IPAddress.TryParse(networkAddressParts[0], out IPAddress? address) ||
+            address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork ||
+            !int.TryParse(networkAddressParts[1], out int cidr) ||
+            cidr < 16 ||
+            cidr > 30)
+        {
+            networkAddressValidation = "Invalid Format";
+            return;
+        }
+
+        networkAddressValidation = null;
+    }
+
+    private void ValidateGatewayAddress()
+    {
+        if (Network is null) return;
+
+        if (!IPAddress.TryParse(Network.GatewayAddress, out IPAddress? address) ||
+             address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+        {
+            gatewayAddressValidation = "Invalid Format";
+            return;
+        }
+
+        gatewayAddressValidation = null;
+    }
+
+    private void ValidateVlan()
+    {
+        if (Network is null) return;
+
+        if (Network.Vlan < 1 || Network.Vlan > 4094)
+        {
+            vlanValidation = "Tag is out of range";
+            return;
+        }
+
+        vlanValidation = null;
+    }
+
+    private void ValidateCapacity()
+    {
+        if (Network is null) return;
+
+        string[] networkAddressParts = Network.NetworkAddress.Split('/');
+        if (networkAddressParts.Length != 2 ||
+            !int.TryParse(networkAddressParts[1], out int cidr) ||
+            cidr < 16 ||
+            cidr > 30 ||
+            !CidrMaxCapacity.TryGetValue(cidr, out int maxCap))
+        {
+            return;
+        }
+
+        if (Network.Capacity < 0 ||
+            Network.Capacity > maxCap)
+        {
+            capacityValidation = $"Capacity is out of range for the network size. A /{cidr} can have at most {maxCap} usable hosts!";
+            return;
+        }
+
+        capacityValidation = null;
+    }
+
+    private async Task ResetFocus(EventCallback callback)
+    {
+        didFocusFirstField = false;
+
+        await callback.InvokeAsync();
+    }
+}

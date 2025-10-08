@@ -1,0 +1,269 @@
+@page "/schedules/{ScheduleId:guid}"
+@page "/schedules/new"
+@using FreePbxTools.Web.Components.EditTable
+@using FreePbxTools.Web.Helpers
+@layout AuthenticatedLayout
+
+<PageTitle>CCS Bell Schedule - Edit Schedule</PageTitle>
+
+<div class="container">
+    <h2 class="text-center">
+        <iconify-icon icon="mdi:format-list-numbered" inline/>
+        Edit Schedule
+    </h2>
+    <div class="card">
+        <div class="card-body">
+            @if (Schedule is not null)
+            {
+                <EditForm Model="Schedule">
+                    <div class="d-flex justify-content-between align-items-end">
+                        <label class="form-label">Name</label>
+                        <div class="d-flex mb-2">
+                            <button
+                                class="btn btn-outline-info"
+                                @onclick="@(() => _navigation.NavigateTo("/schedules"))">
+                                Cancel without Saving
+                            </button>
+                            <button 
+                                class="btn btn-primary ms-2"
+                                @onclick="@(() => Save())"
+                                disabled="@(string.IsNullOrWhiteSpace(Schedule.Name) || Schedule.Events.Count == 0)">
+                                Save and Close
+                            </button>
+                        </div>
+                    </div>
+                    <InputText
+                        class="form-control"
+                        placeholder="Example Schedule Name"
+                        @bind-Value="Schedule.Name"/>
+
+                    <table class="table table-striped table-sm mt-4">
+                        <thead>
+                        <tr>
+                            <th scope="col">
+                                <div class="d-flex align-items-end">
+                                    <span>Time</span>
+                                    <button class="btn btn-outline-info btn-sm ms-2" @onclick="SortEvents">
+                                        <iconify-icon icon="mdi:playlist-plus" inline/>
+                                        Sort
+                                    </button>
+                                </div>
+                            </th>
+                            <th scope="col">
+                                Page Groups
+                            </th>
+                            <th scope="col" class="text-end" style="width: 10rem">
+                                <button class="btn btn-outline-primary" @onclick="AddEvent">
+                                    <iconify-icon icon="mdi:playlist-plus" inline/>
+                                    New Event
+                                </button>
+                            </th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (SettingsService.EventModel scheduleEvent in Schedule.Events)
+                        {
+                            <tr>
+                                <td class="align-middle" style="width: 180px;">
+                                    <InputDate
+                                        Type="InputDateType.Time"
+                                        @bind-Value="@scheduleEvent.Time"
+                                        class="form-control"/>
+                                </td>
+                                <td class="align-middle">
+                                    <div class="row">
+                                        @foreach (SettingsService.PageGroupModel pageGroup in _settings.Staged.PageGroups)
+                                        {
+                                            <div class="col-12 col-md-3 d-flex">
+                                                <input
+                                                    class="form-check-input"
+                                                    type="checkbox"
+                                                    checked="@scheduleEvent.PageGroups.Contains(pageGroup.Extension)"
+                                                    @onchange="e => ChangePageGroup(scheduleEvent, pageGroup.Extension, e.Value)"/>
+                                                <label class="form-check-label">
+                                                    @($"{pageGroup.Extension}: {pageGroup.Name}")
+                                                </label>
+                                            </div>
+                                        }
+                                    </div>
+                                </td>
+                                <td class="text-end" style="width: 10rem">
+                                    <button class="btn btn-outline-danger" @onclick="() => RemoveEvent(scheduleEvent)">
+                                        <iconify-icon icon="mdi:playlist-plus" inline/>
+                                        Remove
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                    @if (Schedule.Events.Count == 0)
+                    {
+                        <p class="text-center">No Events Configured</p>
+                    }
+
+                </EditForm>
+            }
+            
+            <p class="text-center text-muted p-0 mb-0 mt-4">
+                Id: @Schedule?.Id
+            </p>
+            
+            <div class="d-flex justify-content-center mt-2">
+                <button class="btn btn-outline-danger" @onclick="DeleteSchedule">
+                    Delete Schedule
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+
+    [Parameter]
+    public Guid? ScheduleId { get; set; }
+    
+    private SettingsService.ScheduleModel? Schedule { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (ScheduleId is not null)
+        {
+            Schedule = Deep.Copy(
+                _settings.Staged.Schedules
+                    .Where(x => x.Id == ScheduleId)
+                    .FirstOrDefault()
+            );
+
+            if (Schedule is null)
+            {
+                _navigation.NavigateTo("/schedules/new");
+            }
+            
+            RemoveNullTimeEvents();
+            SortEvents();
+            
+            return;
+        }
+        
+        Schedule = new()
+        {
+            Id = Guid.NewGuid(),
+        };
+    }
+
+    private void AddEvent()
+    {
+        Schedule?.Events.Add(new());
+    }
+    
+    private void RemoveEvent(SettingsService.EventModel scheduleEvent)
+    {
+        Schedule?.Events.Remove(scheduleEvent);
+    }
+
+    private void ChangePageGroup(SettingsService.EventModel scheduleEvent, string extension, object? value)
+    {
+        if (value is not bool checkedValue)
+        {
+            return;
+        }
+    
+        if (checkedValue &&
+            !scheduleEvent.PageGroups.Contains(extension))
+        {
+            scheduleEvent.PageGroups.Add(extension);
+        }
+        else if (!checkedValue)
+        {
+            scheduleEvent.PageGroups.Remove(extension);
+        }
+    }
+
+    private void SortEvents()
+    {
+        if (Schedule is null) return;
+        Schedule.Events = Schedule.Events.OrderBy(x => x.Time).ToList();
+    }
+
+    private void RemoveNullTimeEvents()
+    {
+        if (Schedule is null) return;
+        Schedule.Events = Schedule.Events.Where(x => x.Time is not null).ToList();
+    }
+
+    private void Save()
+    {
+        if (Schedule is null) return;
+        
+        RemoveNullTimeEvents();
+        SortEvents();
+        
+        SettingsService.ScheduleModel? existing = _settings.Staged.Schedules
+            .Where(x => x.Id == Schedule.Id)
+            .FirstOrDefault();
+        if (existing is not null)
+        {
+            existing.Name = Schedule.Name;
+            existing.Events = Schedule.Events;
+        }
+        else
+        {
+            _settings.Staged.Schedules.Add(Schedule);
+        }
+
+        _settings.CheckDirty();
+        _navigation.NavigateTo("/schedules");
+    }
+
+    private void DeleteSchedule()
+    {
+        if (Schedule is null) return;
+        
+        if (_settings.Staged.Plan.Monday == ScheduleId)
+        {
+            _settings.Staged.Plan.Monday = Guid.Empty;
+        }
+        
+        if (_settings.Staged.Plan.Tuesday == ScheduleId)
+        {
+            _settings.Staged.Plan.Tuesday = Guid.Empty;
+        }
+        
+        if (_settings.Staged.Plan.Wednesday == ScheduleId)
+        {
+            _settings.Staged.Plan.Wednesday = Guid.Empty;
+        }
+        
+        if (_settings.Staged.Plan.Thursday == ScheduleId)
+        {
+            _settings.Staged.Plan.Thursday = Guid.Empty;
+        }
+        
+        if (_settings.Staged.Plan.Friday == ScheduleId)
+        {
+            _settings.Staged.Plan.Friday = Guid.Empty;
+        }
+        
+        if (_settings.Staged.Plan.Saturday == ScheduleId)
+        {
+            _settings.Staged.Plan.Saturday = Guid.Empty;
+        }
+        
+        if (_settings.Staged.Plan.Sunday == ScheduleId)
+        {
+            _settings.Staged.Plan.Sunday = Guid.Empty;
+        }
+
+        _settings.Staged.Overrides = _settings.Staged.Overrides
+            .Where(x => x.Schedule != ScheduleId)
+            .ToList();
+        
+        _settings.Staged.Schedules = _settings.Staged.Schedules
+            .Where(x => x.Id != Schedule.Id)
+            .ToList();
+            
+        _settings.CheckDirty();
+        _navigation.NavigateTo("/schedules");
+    }
+}

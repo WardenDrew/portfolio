@@ -1,0 +1,111 @@
+﻿@page "/"
+@inject NavigationManager nav
+@inject WebAuthenticationService webAuth
+@inject ProtectedLocalStorage protectedLocalStorage
+@inject IHttpContextAccessor httpContextAccessor
+@inject IDbContextFactory<IronNacDbContext> dbFactory
+@inject DataRefreshNotificationService dataRefresh
+@inject RadiusDisconnectorService disconnector
+
+<PageTitle>IronNAC</PageTitle>
+
+@if (AuthenticateUser?.AccessToken is null)
+{
+    @if (Device is not null && Device.Authorized)
+    {
+        <h5>Your MAC Address:</h5>
+        <div class="w-100 d-flex">
+            <input class="flex-grow-1 me-2 fs-4" type="text" value="@(Device.DeviceMac?.ToUpper())" disabled />
+            <button class="btn btn-outline-info"><span class="mdi mdi-content-copy mdi-24px"></span></button>
+        </div>
+        <h5 class="text-center mt-3">
+            This device is authorized until<br />
+            <code>@Device.AuthorizedUntil</code>
+        </h5>
+        <button class="btn btn-danger btn-lg mt-3" @onclick="@(async _ => { await Debounce(); await RemoveDevice(); })" disabled="@debounce">Remove Device Authorization</button>
+
+        <hr />
+    }
+    
+    <button class="btn btn-primary btn-lg" @onclick="@(async _ => { await Debounce(); nav.NavigateTo("/login"); })" disabled="@debounce">Login</button>
+}
+else
+{
+    <h3 class="text-center">Hello @AuthenticateUser.AccessToken.Name</h3>
+    
+    <button class="btn btn-primary btn-lg mt-1 mb-3" @onclick="@(async _ => {await Debounce(); nav.NavigateTo("/user");})" disabled="@debounce">My Account</button>
+
+    /*
+    @if (AuthenticateUser.AccessToken.PermissionLevel >= PermissionLevel.Moderator)
+    {
+        <button class="btn btn-outline-info btn-lg mb-3" @onclick="@(_ => nav.NavigateTo("/admin/devices"))">Staff Portal</button>
+    }*/
+
+    @if (AuthenticateUser.AccessToken.PermissionLevel >= PermissionLevel.Admin)
+    {
+        <button class="btn btn-outline-info btn-lg mb-3" @onclick="@(async _ => {await Debounce(); nav.NavigateTo("/admin/devices");})" disabled="@debounce">Admin Portal</button>
+    }
+
+    <button class="btn btn-outline-warning btn-lg mt-3" @onclick="@(async _ => {await Debounce(); nav.NavigateTo("/logout");})" disabled="@debounce">Logout</button>
+}
+
+@code
+{
+    [CascadingParameter]
+    public AuthenticateUser? AuthenticateUser { get; set; }
+
+    public IPAddress? DetectedIPAddress { get; set; }
+    public Device? Device { get; set; }
+
+    public Dictionary<Type, bool> Daemons { get; set; } = new();
+
+    private bool debounce = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        if (AuthenticateUser?.AccessToken is not null &&
+            AuthenticateUser?.AccessToken.PermissionLevel == PermissionLevel.User)
+        {
+            nav.NavigateTo("/user");
+            return;
+        }
+
+        DetectedIPAddress = httpContextAccessor.HttpContext?.Connection?.RemoteIpAddress;
+
+        if (DetectedIPAddress is not null)
+        {
+            using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+            Device = await db.Devices
+                .AsNoTracking()
+                .Where(x => x.DetectedDeviceIpAddress == DetectedIPAddress.ToString())
+                .FirstOrDefaultAsync();
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Debounce()
+    {
+        debounce = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RemoveDevice()
+    {
+        if (Device is null) return;
+
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        await db.Devices
+            .Where(x => x.Id == Device.Id)
+            .ExecuteDeleteAsync();
+
+        dataRefresh.DeviceDetailsNotify();
+        dataRefresh.NetworkUsageNotify();
+
+        await disconnector.Disconnect(Device);
+    }
+}

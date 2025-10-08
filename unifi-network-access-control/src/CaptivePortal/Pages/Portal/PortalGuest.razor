@@ -1,0 +1,261 @@
+﻿@page "/portal/guest"
+@inject NavigationManager navigationManager
+@inject RadiusDisconnectorService disconnector
+@inject WebAuthenticationService webAuthService
+@inject ProtectedLocalStorage protectedLocalStorage
+@inject IDbContextFactory<IronNacDbContext> dbFactory
+@inject DataRefreshNotificationService dataRefresh
+
+<PageTitle>Captive Portal > Staff</PageTitle>
+
+@if (device is not null)
+{
+    @if (authorizedUntil is null && registerFailure is null)
+    {
+        if (noNetworksAvailable)
+        {
+            <div class="alert alert-warning">
+                <h5>No Networks Available</h5>
+                <p>At this time, all available network are at capacity. Please contact the IT support team for help!</p>
+            </div>
+        }
+        else if (selectedNetworkGroup is null)
+        {
+            <h5 class="text-center">Select your Network</h5>
+
+            @if (!debounce)
+            {
+                @foreach (NetworkGroup networkGroup in networkGroups)
+                {
+                    <div class="card p-3 mt-4" @onclick="@(_ => {selectedNetworkGroup = networkGroup; })">
+                        <h3>@networkGroup.Name</h3>
+                        <p class="mt-2 mb-1">
+                            <code>@(networkGroupUsage.GetValueOrDefault(networkGroup.Id))</code> of <code>@(networkGroupCapacity.GetValueOrDefault(networkGroup.Id))</code> addresses in use
+                        </p>
+                        <div class="d-flex align-items-center">
+                            <div class="progress flex-grow-1" style="height: 32px;">
+                                <div class="progress-bar overflow-visible" style="@($"width: {GetGroupUsagePercentage(networkGroup.Id)};")">
+                                    <span class="p-2 fs-5">@(GetGroupUsagePercentage(networkGroup.Id)) Full</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        }
+        else
+        {
+            <div class="alert alert-warning" role="alert">
+                <h5>Heads Up!</h5>
+                <p>Registering your device will disconnect it from the Wifi network. Most devices will reconnect automatically.</p>
+                <p>If your device does not reconnect automatically, you will need to manually reconnect to the Wifi network!</p>
+            </div>
+
+            <button class="btn btn-primary btn-lg mb-3" @onclick="@(async _ => {await Debounce(); await RegisterAsync();})" disabled="@debounce">Register this Device</button>
+        }
+
+        <button class="btn btn-outline-warning mt-3" @onclick="@(async _ => {await Debounce(); ReturnToStart();})" disabled="@debounce">Return to Start</button>
+    }
+    else
+    {
+        <h5 class="text-center">This device is authorized until <code>@authorizedUntil</code></h5>
+
+        @if (registerFailure is not null)
+        {
+            <div class="alert alert-danger" role="alert">
+                @registerFailure
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-info" role="alert">
+                You may close this browser window. If your device did not automatically reconnect to the Wifi network, please do so now.
+            </div>
+        }
+    }
+}
+
+@code {
+    private Device? device;
+
+    private List<NetworkGroup> networkGroups = new();
+    private Dictionary<int, int> networkGroupCapacity = new();
+    private Dictionary<int, int> networkGroupUsage = new();
+
+    private NetworkGroup? selectedNetworkGroup;
+
+    private DateTime? authorizedUntil;
+    private string? registerFailure;
+
+    private bool noNetworksAvailable;
+
+    private bool debounce;
+    public async Task Debounce()
+    {
+        debounce = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        var deviceResult = await protectedLocalStorage.GetAsync<int>(nameof(Database.Entities.Device));
+        if (!deviceResult.Success)
+        {
+            navigationManager.NavigateTo("/portal");
+            return;
+        }
+
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        device = await db.Devices
+            .AsNoTracking()
+            .Where(x => x.Id == deviceResult.Value)
+            .FirstOrDefaultAsync();
+        if (device is null)
+        {
+            navigationManager.NavigateTo("/portal");
+            return;
+        }
+
+        dataRefresh.NetworkUsageNotification += async (sender, eventArgs) =>
+        {
+            await Refresh();
+            await InvokeAsync(StateHasChanged);
+        };
+
+        await Refresh();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Refresh()
+    {
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        networkGroups = await db.NetworkGroups
+            .Where(x => x.Guest)
+            .Include(x => x.Networks)
+            .ToListAsync();
+
+        networkGroupCapacity = (await db.Networks
+            .GroupBy(x => x.NetworkGroupId)
+            .Select(x => new KeyValuePair<int, int>(x.Key, x.Sum(y => y.Capacity)))
+            .ToListAsync())
+            .ToDictionary();
+
+        networkGroupUsage = (await db.Networks
+            .GroupBy(x => x.NetworkGroupId)
+            .Select(x => new KeyValuePair<int, int>(x.Key, x.Sum(y => y.DeviceNetworks.Count)))
+            .ToListAsync())
+            .ToDictionary();
+
+        if (networkGroups.Count == 0)
+        {
+            noNetworksAvailable = true;
+        }
+        if (networkGroups.Count == 1)
+        {
+            selectedNetworkGroup = networkGroups.First();
+            int capacity = networkGroupCapacity.GetValueOrDefault(selectedNetworkGroup.Id);
+            int usage = networkGroupUsage.GetValueOrDefault(selectedNetworkGroup.Id);
+
+            noNetworksAvailable = (usage >= capacity);
+        }
+        else
+        {
+            List<NetworkGroup> filtered = new();
+            foreach (NetworkGroup networkGroup in networkGroups)
+            {
+                int capacity = networkGroupCapacity.GetValueOrDefault(networkGroup.Id);
+                int usage = networkGroupUsage.GetValueOrDefault(networkGroup.Id);
+
+                if (usage < capacity) filtered.Add(networkGroup);
+            }
+
+            noNetworksAvailable = (filtered.Count == 0);
+            networkGroups = filtered;
+        }
+    }
+
+    private string GetGroupUsagePercentage(int networkGroupId)
+    {
+        int capacity = networkGroupCapacity.GetValueOrDefault(networkGroupId);
+        int usage = networkGroupUsage.GetValueOrDefault(networkGroupId);
+        if (usage == 0) return "0%";
+        if (capacity == usage) return "100%";
+
+        int percentage = Convert.ToInt32(Math.Ceiling((float)usage * 100f / (float)capacity));
+        // If we rounded up to 100% but aren't actually capacity == usage then set to 99%
+        if (percentage == 100) percentage = 99;
+
+        return $"{percentage}%";
+    }
+
+    /*private void SelectNetworkGroup(ChangeEventArgs e)
+    {
+        if (e.Value is null) return;
+        selectedNetworkGroup = networkGroups
+            .Where(x => x.Id == (int)e.Value)
+            .FirstOrDefault();
+    }*/
+
+    private async Task RegisterAsync()
+    {
+        if (this.device is null || selectedNetworkGroup is null)
+            return;
+
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        authorizedUntil = DateTime.UtcNow.AddDays(30);
+
+        await db.Devices
+            .Where(x => x.Id == this.device.Id)
+            .ExecuteUpdateAsync(x => x
+                .SetProperty(p => p.Authorized, true)
+                .SetProperty(p => p.AuthorizedUntil, authorizedUntil)
+            );
+
+        await db.DeviceNetworks
+            .Where(x => x.DeviceId == device.Id)
+            .ExecuteDeleteAsync();
+
+        Network? selectedNetwork = await db.Networks
+                .Where(x => x.NetworkGroupId == selectedNetworkGroup.Id)
+                .Where(x => x.DeviceNetworks.Count < x.Capacity)
+                .FirstOrDefaultAsync();
+        if (selectedNetwork is null)
+            return;
+
+        DeviceNetwork deviceNetwork = new()
+        {
+            DeviceId = device.Id,
+            NetworkId = selectedNetwork.Id
+        };
+        db.Add(deviceNetwork);
+        await db.SaveChangesAsync();
+
+        await protectedLocalStorage.DeleteAsync(nameof(device));
+
+        dataRefresh.DeviceDetailsNotify();
+        dataRefresh.NetworkUsageNotify();
+
+        Device? reloadedDevice = await db.Devices
+            .AsNoTracking()
+            .Where(x => x.Id == this.device.Id)
+            .FirstOrDefaultAsync();
+
+        // This must end this method as the disconnect will kill the blazor circuit
+        if (reloadedDevice is null ||
+            !await disconnector.Disconnect(reloadedDevice))
+        {
+            registerFailure = "Could not automatically disconnect and reconnect your device! Please manually disconnect and reconnect to the Wifi Network!";
+        }
+    }
+
+    private void ReturnToStart()
+    {
+        navigationManager.NavigateTo("/logout?redirect=%2Fportal");
+        return;
+    }
+}

@@ -1,0 +1,30 @@
+﻿@inherits LayoutComponentBase
+@inject IronNacConfiguration configuration
+
+<AuthenticateUser>
+    <CheckPermissions Level="Models.PermissionLevel.User">
+        <div class="w-100 d-flex justify-content-center p-2">
+            <div class="card bg-body-tertiary shadow flex-grow-1 p-4" style="max-width: 600px;">
+                <h1 class="text-center">@((MarkupString)configuration.TextTitle)</h1>
+                <h3 class="text-center">@((MarkupString)configuration.TextSubtitle)</h3>
+
+                <hr />
+        
+                @Body
+
+                <hr />
+
+                <p class="text-center">@((MarkupString)configuration.TextHelp)</p>
+
+                @if (configuration.WebHttpsCertStaging)
+                {
+                    <div class="alert alert-warning" role="alert">
+                        <p>Using the Lets Encrypt Staging Environment. This should only be done while testing and should be disabled for production!</p>
+                        <p>The Staging certificates are not trusted by client devices and cannot be used for the Captive Portal API standard that most mobile devices support!</p>
+                        <p>Once you have confirmed that your DNS API settings are setup correctly, switch to production certificates!</p>
+                    </div>
+                }
+            </div>
+        </div>
+    </CheckPermissions>
+</AuthenticateUser>

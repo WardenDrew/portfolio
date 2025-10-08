@@ -1,0 +1,206 @@
+﻿@page "/admin/networks/group"
+@page "/admin/networks/group/{GroupId}"
+@layout AdminLayout
+@inject NavigationManager nav
+@inject IDbContextFactory<IronNacDbContext> dbFactory
+@inject DataRefreshNotificationService dataRefresh
+
+<PageTitle>Admin > Networks</PageTitle>
+
+<div class="container-sm" style="max-width: 720px;">
+    <h1 class="text-center mt-sm-4">Networks</h1>
+    <h3 class="text-center">@networkGroup?.Name</h3>
+
+    <hr />
+
+    @if (newNetwork is not null)
+    {
+        <div class="card p-3 mt-4">
+            <h3 class="text-center">New Network</h3>
+            <EditNetwork 
+                Network="newNetwork" 
+                OnSubmit="@(async _ => await CreateNetwork())" 
+                OnCancel="@(_ => newNetwork = null)"/>
+        </div>
+    }
+    else if (editNetwork is not null)
+    {
+        <div class="card p-3 mt-4">
+            <h3 class="text-center">Edit Network</h3>
+            <EditNetwork
+                Network="editNetwork"
+                OnSubmit="@(async _ => await UpdateNetwork())"
+                OnDelete="@(async _ => await DeleteNetwork())"
+                OnCancel="@(_ => editNetwork = null)" />
+        </div>
+    }
+    else
+    {
+        <div class="d-flex flex-column flex-sm-row justify-content-center">
+            <button class="btn btn-primary" @onclick="@(async _ => await NewNetwork())">New Network</button>
+            <button class="btn btn-secondary mt-3 mt-sm-0 ms-sm-2" @onclick="@(_ => nav.NavigateTo("/admin/networks"))">Return to Network Groups</button>
+        </div>
+
+        @foreach (Network network in networks)
+        {
+            <div class="card p-3 mt-4">
+                <div class="d-flex justify-content-between">
+                    <h3>@network.Name</h3>
+                    <div class="ps-1">
+                        <button class="d-none d-sm-block btn btn-warning" @onclick="@(_ => editNetwork = network)">Edit</button>
+                    </div>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(network.Description))
+                {
+                    <p class="mt-2 mb-1">@network.Description</p>
+                }
+                <p class="mt-2 mb-1">
+                    Network Address: <code>@network.NetworkAddress</code><br />
+                    Gateway Address: <code>@network.GatewayAddress</code><br />
+                    VLAN Tag: <code>@network.Vlan</code><br />
+                    <code>@(networkUsage.GetValueOrDefault(network.Id))</code> of <code>@(network.Capacity)</code> addresses in use
+                </p>
+                <div class="d-flex align-items-center">
+                    <div class="progress flex-grow-1" style="height: 32px;">
+                        <div class="progress-bar overflow-visible" style="@($"width: {GetUsagePercentage(network.Id, network.Capacity)};")">
+                            <span class="p-2 fs-5">@(GetUsagePercentage(network.Id, network.Capacity)) Full</span>
+                        </div>
+                    </div>
+                </div>
+                <button class="d-block d-sm-none btn btn-outline-warning mt-4" @onclick="@(_ => editNetwork = network)">Edit</button>
+            </div>
+        }
+    }
+
+    
+</div>
+
+@code {
+    [Parameter]
+    public string? GroupId { get; set; }
+    private NetworkGroup? networkGroup;
+
+    private List<Network> networks = new();
+    private Dictionary<int, int> networkUsage = new();
+
+    private Network? newNetwork;
+    private Network? editNetwork;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        if (!int.TryParse(GroupId, out int groupId))
+        {
+            nav.NavigateTo("/admin/networks");
+            return;
+        }
+
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        networkGroup = await db.NetworkGroups
+            .AsNoTracking()
+            .Where(x => x.Id == groupId)
+            .FirstOrDefaultAsync();
+        if (networkGroup is null)
+        {
+            nav.NavigateTo("/admin/networks");
+            return;
+        }
+
+        dataRefresh.NetworkUsageNotification += async (sender, eventArgs) =>
+        {
+            await Refresh();
+            await InvokeAsync(StateHasChanged);
+        };
+
+        await Refresh();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Refresh()
+    {
+        if (networkGroup is null) return;
+
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        networks = await db.Networks
+            .Where(x => x.NetworkGroupId == networkGroup.Id)
+            .OrderBy(x => x.NetworkAddress)
+            .ToListAsync();
+
+        networkUsage = (await db.DeviceNetworks
+            .GroupBy(x => x.NetworkId)
+            .Select(x => new KeyValuePair<int, int>(x.Key, x.Count()))
+            .ToListAsync())
+            .ToDictionary();
+    }
+
+    private string GetUsagePercentage(int networkId, int capacity)
+    {
+        int usage = networkUsage.GetValueOrDefault(networkId);
+        if (usage == 0) return "0%";
+        if (capacity == usage) return "100%";
+
+        int percentage = Convert.ToInt32(Math.Ceiling((float)usage * 100f / (float)capacity));
+        // If we rounded up to 100% but aren't actually capacity == usage then set to 99%
+        if (percentage == 100) percentage = 99;
+
+        return $"{percentage}%";
+    }
+
+    private async Task NewNetwork()
+    {
+        if (networkGroup is null) return;
+
+        newNetwork = new Network()
+        {
+            NetworkGroupId = networkGroup.Id
+        };
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CreateNetwork()
+    {
+        if (newNetwork is null) return;
+
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        db.Networks.Add(newNetwork);
+        await db.SaveChangesAsync();
+
+        newNetwork = null;
+
+        dataRefresh.NetworkUsageNotify();
+    }
+
+    private async Task UpdateNetwork()
+    {
+        if (editNetwork is null) return;
+
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        db.Update(editNetwork);
+        await db.SaveChangesAsync();
+
+        editNetwork = null;
+
+        dataRefresh.NetworkUsageNotify();
+    }
+
+    private async Task DeleteNetwork()
+    {
+        if (editNetwork is null) return;
+
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        db.Remove(editNetwork);
+        await db.SaveChangesAsync();
+
+        editNetwork = null;
+
+        dataRefresh.NetworkUsageNotify();
+    }
+
+}

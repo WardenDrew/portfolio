@@ -1,0 +1,8 @@
+services:
+  code-server-test:
+    build: .
+    volumes:
+      - ./config/test:/config
+      - ./projects/test:/projects
+    ports:
+      - 8080:8080

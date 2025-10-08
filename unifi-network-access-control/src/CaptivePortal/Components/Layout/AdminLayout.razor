@@ -1,0 +1,70 @@
+﻿@inherits LayoutComponentBase
+
+<AuthenticateUser>
+    <CheckPermissions Level="Models.PermissionLevel.Admin">
+        <div class="d-flex flex-column min-vh-100">
+            <div class="d-flex d-sm-none justify-content-between align-items-center bg-body-tertiary py-2 px-3 sticky-top">
+                <div class="d-flex flex-column">
+                    <h3 class="mb-0">IronNAC</h3>
+                    <h5 class="mb-0">Admin Panel</h5>
+                </div>
+                <a href="/" class="text-decoration-none">
+                    <span class="mdi mdi-exit-to-app mdi-36px lh-1"></span>
+                </a>
+            </div>
+
+            <div class="flex-grow-1 d-flex flex-column flex-sm-row">
+                <div class="navigation order-3 order-sm-1 sticky-bottom sticky-sm-top bg-body-tertiary p-0">
+                    <div class="d-flex flex-sm-column flex-row flex-nowrap align-items-center sticky-bottom sticky-sm-top">
+                        <div class="w-100 flex-grow-1 d-flex flex-column px-2">
+                            <div class="d-none d-sm-flex flex-column justify-content-center align-items-baseline px-3 pt-3">
+                                <h3 class="mb-0">IronNAC</h3>
+                                <h5 class="mb-0">Admin Panel</h5>
+                            </div>
+                            <ul class="nav nav-pills nav-flush flex-grow-1 flex-sm-column flex-row flex-nowrap justify-content-evenly mx-sm-2 my-2 my-sm-0">
+                                
+                                <li>
+                                    <a href="/admin/devices" class="d-flex flex-row align-items-center border-0 py-0 text-decoration-none mt-sm-4">
+                                        <span class="mdi mdi-monitor-multiple mdi-36px lh-1"></span>
+                                        <h5 class="ms-2 mb-0 mt-0 d-none d-sm-inline">Devices</h5>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="/admin/users" class="d-flex flex-row align-items-center border-0 py-0 text-decoration-none mt-sm-4">
+                                        <span class="mdi mdi-account-multiple mdi-36px lh-1"></span>
+                                        <h5 class="ms-2 mb-0 mt-0 d-none d-sm-inline">Users</h5>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="/admin/networks" class="d-flex flex-row align-items-center border-0 py-0 text-decoration-none mt-sm-4">
+                                        <span class="mdi mdi-access-point-network mdi-36px lh-1"></span>
+                                        <h5 class="ms-2 mb-0 mt-0 d-none d-sm-inline">Networks</h5>
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="/admin/services" class="d-flex flex-row align-items-center border-0 py-0 text-decoration-none mt-sm-4">
+                                        <span class="mdi mdi-server mdi-36px lh-1"></span>
+                                        <h5 class="ms-2 mb-0 mt-0 d-none d-sm-inline">Services</h5>
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="order-2 flex-grow-1 py-2">
+                    <div class="container-fluid">
+                        @Body
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-none d-sm-block position-fixed bottom-0 left-0 pb-4 ps-3" style="z-index: 9001">
+            <a href="/" class="d-flex flex-row align-items-center border-0 py-0 text-decoration-none mt-sm-4">
+                <span class="mdi mdi-exit-to-app mdi-36px lh-1"></span>
+                <h5 class="ms-2 mb-0 mt-0 d-none d-sm-inline">Leave</h5>
+            </a>
+        </div>
+
+    </CheckPermissions>
+</AuthenticateUser>

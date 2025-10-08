@@ -1,0 +1,35 @@
+﻿@page "/logout"
+@inject WebAuthenticationService webAuthService
+@inject ProtectedLocalStorage protectedLocalStorage
+@inject NavigationManager navigationManager
+@inject IJSRuntime jsRuntime
+
+<PageTitle>Logout</PageTitle>
+
+<h5>Logging you out...</h5>
+
+@code {
+
+    [SupplyParameterFromQuery(Name = "redirect")]
+    public string? Redirect { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await webAuthService.WebLogoutAsync(protectedLocalStorage);
+
+        await jsRuntime.InvokeVoidAsync("localStorage.clear");
+
+        await InvokeAsync(StateHasChanged);
+
+        if (Redirect is not null)
+        {
+            navigationManager.NavigateTo(Redirect);
+        }
+        else
+        {
+            navigationManager.NavigateTo("/");
+        }
+    }
+}

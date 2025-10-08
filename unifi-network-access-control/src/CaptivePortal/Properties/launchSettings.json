@@ -1,0 +1,19 @@
+{
+  "profiles": {
+    "http": {
+      "commandName": "Project",
+      "commandLineArgs": "--env .env",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "dotnetRunMessages": true,
+      "externalUrlConfiguration": true
+    },
+    "Docker": {
+      "commandName": "Docker",
+      "publishAllPorts": false,
+      "externalUrlConfiguration": true
+    }
+  },
+  "$schema": "http://json.schemastore.org/launchsettings.json"
+}

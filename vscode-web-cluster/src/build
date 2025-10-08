@@ -1,0 +1,191 @@
+#!/bin/bash
+
+source ./SETTINGS || exit 1;
+
+docker build -t 'local/code-server' . || exit 1;
+
+if [[ -f compose.yml ]]; then
+  echo "Bringing down previous compose project if it is running"
+  docker compose -f compose.yml down
+  echo ""
+fi
+
+echo "Generating template"
+echo ""
+
+compose=$(cat <<END_HEREDOC
+networks:
+  ${BASE_DOCKER_NAME}-net:
+    name: ${BASE_DOCKER_NAME}-net
+
+services:
+END_HEREDOC
+)
+compose+=$'\n'
+
+composeProxy=$(cat <<END_HEREDOC
+
+  proxy:
+    image: caddy:2
+    container_name: ${BASE_DOCKER_NAME}-proxy
+    restart: unless-stopped
+    volumes:
+      - ./proxy/config:/etc/caddy
+      - ./proxy/srv:/srv
+    networks:
+      - ${BASE_DOCKER_NAME}-net
+END_HEREDOC
+)
+composeProxy+=$'\n'
+
+if [[ -n "${PROXY_PORT}" ]]; then
+  composeProxy+=$(cat <<END_HEREDOC
+    ports:
+      - "${PROXY_PORT}:80"
+END_HEREDOC
+)
+  composeProxy+=$'\n'
+fi
+
+composeProxy+=$(cat <<END_HEREDOC
+    depends_on:
+END_HEREDOC
+)
+composeProxy+=$'\n'
+
+caddy=":80 {"$'\n'
+
+# Calculate longest fields
+longestuser=8;
+for user in "${TEACHERS[@]}"; do
+  if [[ ${#user} -gt $longestuser ]]; then
+    longestuser=${#user}
+  fi
+done
+
+for user in "${STUDENTS[@]}"; do
+  if [[ ${#user} -gt $longestuser ]]; then
+    longestuser=${#user}
+  fi
+done
+longestuser=$(($longestuser + 1))
+
+printf "\e[4m\e[1m|%-8s|%-${longestuser}s|%-17s|\e[0m\n" "Access" "Username" "Password"
+for user in "${TEACHERS[@]}"; do
+  pass1="$(tr -cd '[:lower:][:digit:]' < /dev/urandom | head -c 4)"
+  pass2="$(tr -cd '[:lower:][:digit:]' < /dev/urandom | head -c 4)"
+  pass3="$(tr -cd '[:lower:][:digit:]' < /dev/urandom | head -c 4)"
+  pass="${pass1}-${pass2}-${pass3}"
+
+  compose+=$(cat <<END_HEREDOC
+
+  ${BASE_DOCKER_NAME}-instance-${user}:
+    image: local/code-server
+    container_name: ${BASE_DOCKER_NAME}-instance-${user}
+    restart: unless-stopped
+    healthcheck:
+      test: "curl -f http://${BASE_DOCKER_NAME}-instance-${user}:8080/healthz"
+    volumes:
+      - ./config/${user}:/config
+      - ./projects/${user}:/projects
+      - ./projects:/projects-all
+    environment:
+      - USERNAME=${user}
+      - PASSWORD=${pass}
+    networks:
+      - ${BASE_DOCKER_NAME}-net
+END_HEREDOC
+  )
+  compose+=$'\n'
+
+  caddy+=$(cat <<END_HEREDOC
+
+    redir /${user} /${user}/
+    handle_path /${user}/* {
+        reverse_proxy http://${BASE_DOCKER_NAME}-instance-${user}:8080
+    }
+END_HEREDOC
+  )
+  caddy+=$'\n'
+
+  composeProxy+=$(cat <<END_HEREDOC
+      ${BASE_DOCKER_NAME}-instance-${user}:
+        condition: service_healthy
+END_HEREDOC
+  )
+  composeProxy+=$'\n'
+
+  printf "|%-8s|%-${longestuser}s|%-17s|\n" "Teacher" "${user}" "${pass}"
+done
+
+echo ""
+printf "\e[4m\e[1m|%-8s|%-${longestuser}s|%-17s|\e[0m\n" "Access" "Username" "Password"
+for user in "${STUDENTS[@]}"; do
+  pass1="$(tr -cd '[:lower:][:digit:]' < /dev/urandom | head -c 4)"
+  pass2="$(tr -cd '[:lower:][:digit:]' < /dev/urandom | head -c 4)"
+  pass3="$(tr -cd '[:lower:][:digit:]' < /dev/urandom | head -c 4)"
+  pass="${pass1}-${pass2}-${pass3}"
+
+  compose+=$(cat <<END_HEREDOC
+  
+  ${BASE_DOCKER_NAME}-instance-${user}:
+    image: local/code-server
+    container_name: ${BASE_DOCKER_NAME}-instance-${user}
+    restart: unless-stopped
+    healthcheck:
+      test: "curl -f http://${BASE_DOCKER_NAME}-instance-${user}:8080/healthz"
+    volumes:
+      - ./config/${user}:/config
+      - ./projects/${user}:/projects
+    environment:
+      - USERNAME=${user}
+      - PASSWORD=${pass}
+    networks:
+      - ${BASE_DOCKER_NAME}-net
+END_HEREDOC
+  )
+  compose+=$'\n'
+
+  caddy+=$(cat <<END_HEREDOC
+
+    redir /${user} /${user}/
+    handle_path /${user}/* {
+        reverse_proxy http://${BASE_DOCKER_NAME}-instance-${user}:8080
+    }
+END_HEREDOC
+  )
+  caddy+=$'\n'
+
+  composeProxy+=$(cat <<END_HEREDOC
+      ${BASE_DOCKER_NAME}-instance-${user}:
+        condition: service_healthy
+END_HEREDOC
+  )
+  composeProxy+=$'\n'
+
+  printf "|%-8s|%-${longestuser}s|%-17s|\n" "Student" "${user}" "${pass}"
+done
+
+compose+="${composeProxy}"$'\n'
+
+caddyTemplate=$(cat <<END_HEREDOC
+
+    handle {
+        root * /srv
+        try_files {path} /index.html
+        file_server
+    }
+}
+END_HEREDOC
+  )
+caddy+="${caddyTemplate}"$'\n'
+
+echo ""
+
+echo "${compose}" > compose.yml
+echo "Generated 'compose.yml'"
+echo ""
+
+echo "${caddy}" > proxy/config/Caddyfile
+echo "Generated 'proxy/config/Caddyfile'"
+echo ""

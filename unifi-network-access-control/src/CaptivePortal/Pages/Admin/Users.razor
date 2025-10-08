@@ -1,0 +1,310 @@
+﻿@page "/admin/users"
+@layout AdminLayout
+@inject RadiusDisconnectorService disconnector
+@inject IDbContextFactory<IronNacDbContext> dbFactory
+@inject DataRefreshNotificationService dataRefresh
+@inject RadiusDisconnectorService disconnector
+@inject NavigationManager nav
+
+<PageTitle>Admin > Users</PageTitle>
+
+<div class="container-sm" style="max-width: 720px;">
+    <h1 class="text-center mt-sm-4">Users</h1>
+
+    <hr />
+
+    @if (newUser is not null)
+    {
+        <div class="card p-3 mt-4">
+            <h3 class="text-center">New User</h3>
+            <EditUser User="newUser"
+                CreatingNew="true"
+                OnSubmit="CreateUser"
+                OnCancel="@(_ => newUser = null)" />
+        </div>
+    }
+    else if (editUser is not null)
+    {
+        <div class="card p-3 mt-4">
+            <h3 class="text-center">Edit User</h3>
+            <EditUser User="editUser"
+                CreatingNew="false"
+                OnSubmit="UpdateUser"
+                OnCancel="@(_ => editUser = null)"
+                OnDelete="DeleteUser" />
+        </div>
+    }
+    else
+    {
+        <div class="d-flex flex-column flex-sm-row justify-content-center">
+            <form class="flex-grow-1 d-flex flex-column flex-sm-row" @onsubmit="@(async _ => await DoSearch())">
+                <input class="flex-grow-1" type="search" @bind="search" />
+                <button class="btn btn-success ms-0 ms-sm-2 mt-2 mt-sm-0">Search</button>
+            </form>
+            <button class="btn btn-primary ms-0 ms-sm-2 mt-2 mt-sm-0" @onclick="@(async _ => await NewUser())">New User</button>
+        </div>
+
+        <div class="d-flex flex-column align-items-center mt-5 mb-2">
+            <nav>
+                <ul class="pagination mb-1">
+                    <li class="page-item">
+                        <button class="@($"page-link{(page < 2 ? " disabled" : "")}")" disabled="@(page < 2)" @onclick="@(async _ => await PreviousPage())">
+                            <span class="mdi mdi-arrow-left-thick"></span>
+                        </button>
+                    </li>
+                    <li class="page-item active" aria-current="page">
+                        <span class="page-link">@(page)</span>
+                    </li>
+                    <li class="page-item">
+                        <button class="@($"page-link{(page >= totalPages ? " disabled" : "")}")" disabled="@(page >= totalPages)" @onclick="@(async _ => await NextPage())">
+                            <span class="mdi mdi-arrow-right-thick"></span>
+                        </button>
+                    </li>
+                </ul>
+            </nav>
+            <span>Showing @(Math.Min(count, ((page - 1) * take) + 1))-@(Math.Min(count, ((page - 1) * take) + take + 1)) of @(count) Users</span>
+        </div>
+
+        @foreach (User user in users)
+        {
+            <div class="card p-3 mb-3">
+                <div class="d-flex flex-column flex-sm-row justify-content-between">
+                    <h3>@user.Name</h3>
+                    <h5 class="mb-0"><code>@user.Email</code></h5>
+                </div>
+                <p class="my-1">
+                    Permission Level: <code>@user.PermissionLevel</code><br />
+                </p>
+
+                <div class="d-flex flex-column flex-sm-row justify-content-end mt-2">
+                    @if (AuthenticateUser?.AccessToken is null || AuthenticateUser?.AccessToken.UserId == user.Id)
+                    {
+                        <span>You may not edit your own user</span>
+                    }
+                    else
+                    {
+                        <button class="btn btn-info" @onclick="@(_ => editUser = user)">Edit User</button>
+                    }
+                </div>
+            </div>
+        }
+
+        <div class="d-flex flex-column align-items-center mt-2">
+            <nav>
+                <ul class="pagination mb-1">
+                    <li class="page-item">
+                        <button class="@($"page-link{(page <= 1 ? " disabled" : "")}")" disabled="@(page <= 1)" @onclick="@(async _ => await PreviousPage())">
+                            <span class="mdi mdi-arrow-left-thick"></span>
+                        </button>
+                    </li>
+                    <li class="page-item active" aria-current="page">
+                        <span class="page-link">@(page)</span>
+                    </li>
+                    <li class="page-item">
+                        <button class="@($"page-link{(page >= totalPages ? " disabled" : "")}")" disabled="@(page >= totalPages)" @onclick="@(async _ => await NextPage())">
+                            <span class="mdi mdi-arrow-right-thick"></span>
+                        </button>
+                    </li>
+                </ul>
+            </nav>
+            <span>Showing @(Math.Min(count, ((page - 1) * take) + 1))-@(Math.Min(count, ((page - 1) * take) + take + 1)) of @(count) Users</span>
+        </div>
+    }
+</div>
+
+@code {
+
+    [CascadingParameter]
+    public AuthenticateUser? AuthenticateUser { get; set; }
+
+    private List<User> users = new();
+
+    private User? newUser;
+    private User? editUser;
+
+    private int page = 1;
+    private int take = 10;
+    private int count = 0;
+    private int totalPages = 1;
+    private string? search;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        dataRefresh.UserDetailsNotification += async (sender, eventArgs) =>
+        {
+            await Refresh();
+            await InvokeAsync(StateHasChanged);
+        };
+
+        await Refresh();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Refresh()
+    {
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        IQueryable<User> query = db.Users
+            .AsNoTracking();
+
+        if (!String.IsNullOrWhiteSpace(search))
+        {
+            search = search.ToLower();
+            query = query
+                .Where(x =>
+                    (x.Email != null && x.Email.StartsWith(search)) ||
+                    (x.Name != null && x.Name.StartsWith(search))
+                );
+        }
+
+        count = await query.CountAsync();
+
+        int skip = (page - 1) * take;
+        if (skip > count) skip = count;
+        totalPages = Convert.ToInt32(Math.Ceiling((float)count / (float)take));
+
+        users = await query
+            .OrderBy(x => x.Email)
+            .Skip((page - 1) * take)
+            .Take(take)
+            .ToListAsync();
+    }
+
+    private async Task DeleteUser()
+    {
+        if (editUser is null) return;
+
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        // TODO Disconnect devices
+
+        await db.Users
+            .Where(x => x.Id == editUser.Id)
+            .ExecuteDeleteAsync();
+
+        dataRefresh.UserDetailsNotify();
+    }
+
+    private async Task NewUser()
+    {
+        newUser = new User();
+        newUser.ChangePasswordNextLogin = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CreateUser(EditUserSubmitModel result)
+    {
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        if (result.Password is not null)
+        {
+            result.User.Hash = WebAuthenticationService.GetHash(result.Password);
+        }
+
+        db.Add(result.User);
+        await db.SaveChangesAsync();
+
+        foreach (KeyValuePair<NetworkGroup, bool> kvp in result.NetworkGroups)
+        {
+            if (!kvp.Value) continue;
+
+            db.Add(new UserNetworkGroup()
+            {
+                UserId = result.User.Id,
+                NetworkGroupId = kvp.Key.Id
+            });
+        }
+        await db.SaveChangesAsync();
+
+        newUser = null;
+
+        dataRefresh.UserDetailsNotify();
+    }
+
+    private async Task UpdateUser(EditUserSubmitModel result)
+    {
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        if (result.Password is not null)
+        {
+            result.User.Hash = WebAuthenticationService.GetHash(result.Password);
+        }
+
+        db.Update(result.User);
+        await db.SaveChangesAsync();
+
+        List<UserNetworkGroup> existingNetworkGroups = await db.UserNetworkGroups
+            .Where(x => x.UserId == result.User.Id)
+            .ToListAsync();
+
+        List<Device> devicesToDisconnect = new();
+
+        foreach (KeyValuePair<NetworkGroup, bool> kvp in result.NetworkGroups)
+        {
+            if (kvp.Value &&
+                !existingNetworkGroups
+                    .Where(x => x.NetworkGroupId == kvp.Key.Id)
+                    .Any())
+            {
+                db.Add(new UserNetworkGroup()
+                {
+                    UserId = result.User.Id,
+                    NetworkGroupId = kvp.Key.Id
+                });
+            }
+            else if (!kvp.Value)
+            {
+                UserNetworkGroup? removeAssignment = existingNetworkGroups
+                    .Where(x => x.NetworkGroupId == kvp.Key.Id)
+                    .FirstOrDefault();
+
+                if (removeAssignment is not null)
+                {
+                    db.Remove(removeAssignment);
+
+                    devicesToDisconnect.AddRange(await db.Devices
+                        .Where(x => x.UserId == result.User.Id)
+                        .Where(x => x.DeviceNetwork.Network.NetworkGroupId == kvp.Key.Id)
+                        .ToListAsync());
+                }
+            }
+
+        }
+        await db.SaveChangesAsync();
+
+        foreach (Device device in devicesToDisconnect)
+        {
+            db.Remove(device);
+            await db.SaveChangesAsync();
+            await disconnector.Disconnect(device);
+        }
+
+        dataRefresh.UserDetailsNotify();
+
+        editUser = null;
+    }
+
+    private async Task PreviousPage()
+    {
+        if (page <= 1) return;
+        page--;
+        await Refresh();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task NextPage()
+    {
+        if (page >= totalPages) return;
+        page++;
+        await Refresh();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task DoSearch()
+    {
+        await Refresh();
+        await InvokeAsync(StateHasChanged);
+    }
+}

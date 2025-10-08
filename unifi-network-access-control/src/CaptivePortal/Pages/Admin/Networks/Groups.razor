@@ -1,0 +1,203 @@
+﻿@page "/admin/networks"
+@layout AdminLayout
+@inject NavigationManager nav
+@inject IDbContextFactory<IronNacDbContext> dbFactory
+@inject DataRefreshNotificationService dataRefresh
+
+<PageTitle>Admin > Networks Groups</PageTitle>
+
+<div class="container-sm" style="max-width: 720px;">
+    <h1 class="text-center mt-sm-4">Network Groups</h1>
+
+    <hr />
+
+    @if (newNetworkGroup is not null)
+    {
+        <div class="card p-3 mt-4">
+            <h3 class="text-center">New Network Group</h3>
+            <EditNetworkGroup 
+                NetworkGroup="newNetworkGroup" 
+                OnSubmit="@(async _ => await CreateNetworkGroup())" 
+                OnCancel="@(_ => newNetworkGroup = null)"/>
+        </div>
+    }
+    else if (editNetworkGroup is not null)
+    {
+        <div class="card p-3 mt-4">
+            <h3 class="text-center">Edit Network Group</h3>
+            <EditNetworkGroup
+                NetworkGroup="editNetworkGroup"
+                OnSubmit="@(async _ => await UpdateNetworkGroup())"
+                OnDelete="@(async _ => await DeleteNetworkGroup())"
+                OnCancel="@(_ => editNetworkGroup = null)" />
+        </div>
+    }
+    else
+    {
+        <div class="d-flex flex-column flex-sm-row justify-content-center">
+            <button class="btn btn-primary" @onclick="@(async _ => await NewNetworkGroup())">New Network Group</button>
+        </div>
+
+        @foreach (NetworkGroup networkGroup in networkGroups)
+        {
+            <div class="card p-3 mt-4">
+                <div class="d-flex justify-content-between">
+                    <div class="flex-grow-1 d-flex flex-column flex-wrap">
+                        <h3>@networkGroup.Name</h3>
+                        <span>
+                            @if (networkGroup.Registration)
+                            {
+                                <span class="badge bg-danger mx-1 p-2">Registration</span>
+                            }
+                            @if (networkGroup.Guest)
+                            {
+                                <span class="badge bg-success mx-1 p-2">Guest</span>
+                            }
+                            @if (networkGroup.IsPool)
+                            {
+                                <span class="badge bg-primary mx-1 p-2">Pooled</span>
+                            }
+                        </span>
+                    </div>
+                    @if (!networkGroup.Registration)
+                    {
+                        <div class="ps-1">
+                            <button class="d-none d-sm-block btn btn-warning" @onclick="@(_ => editNetworkGroup = networkGroup)">Edit</button>
+                        </div>
+                    }
+                </div>
+                @if (!string.IsNullOrWhiteSpace(networkGroup.Description))
+                {
+                    <p class="mt-2 mb-1">@networkGroup.Description</p>
+                }
+                <p class="mt-2 mb-1">
+                    Networks: <code>@networkGroup.Networks.Count</code><br />
+                    <code>@(networkGroupUsage.GetValueOrDefault(networkGroup.Id))</code> of <code>@(networkGroupCapacity.GetValueOrDefault(networkGroup.Id))</code> addresses in use
+                </p>
+                <div class="d-flex align-items-center">
+                    <button class="d-none d-sm-block btn btn-info btn-sm me-1" @onclick="@(_ => nav.NavigateTo($"/admin/networks/group/{networkGroup.Id}"))">View Networks</button>
+                    <div class="progress flex-grow-1" style="height: 32px;">
+                        <div class="progress-bar overflow-visible" style="@($"width: {GetUsagePercentage(networkGroup.Id)};")">
+                            <span class="p-2 fs-5">@(GetUsagePercentage(networkGroup.Id)) Full</span>
+                        </div>
+                    </div>
+                </div>
+                <button class="d-block d-sm-none btn btn-info mt-2" @onclick="@(_ => nav.NavigateTo($"/admin/networks/group/{networkGroup.Id}"))">View Networks</button>
+                @if (!networkGroup.Registration)
+                {
+                    <button class="d-block d-sm-none btn btn-outline-warning mt-4" @onclick="@(_ => editNetworkGroup = networkGroup)">Edit</button>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private List<NetworkGroup> networkGroups = new();
+
+    private NetworkGroup? newNetworkGroup;
+    private NetworkGroup? editNetworkGroup;
+
+    private Dictionary<int, int> networkGroupCapacity = new();
+    private Dictionary<int, int> networkGroupUsage = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        dataRefresh.NetworkUsageNotification += async (sender, eventArgs) =>
+        {
+            await Refresh();
+            await InvokeAsync(StateHasChanged);
+        };
+
+        await Refresh();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Refresh()
+    {
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        networkGroups = await db.NetworkGroups
+            .Include(x => x.Networks)
+            .OrderByDescending(x => x.Registration)
+            .ThenByDescending(x => x.Guest)
+            .ToListAsync();
+
+        networkGroupCapacity = (await db.Networks
+            .GroupBy(x => x.NetworkGroupId)
+            .Select(x => new KeyValuePair<int, int>(x.Key, x.Sum(y => y.Capacity)))
+            .ToListAsync())
+            .ToDictionary();
+
+        networkGroupUsage = (await db.Networks
+            .GroupBy(x => x.NetworkGroupId)
+            .Select(x => new KeyValuePair<int, int>(x.Key, x.Sum(y => y.DeviceNetworks.Count)))
+            .ToListAsync())
+            .ToDictionary();
+    }
+
+    private string GetUsagePercentage(int networkGroupId)
+    {
+        int capacity = networkGroupCapacity.GetValueOrDefault(networkGroupId);
+        int usage = networkGroupUsage.GetValueOrDefault(networkGroupId);
+        if (usage == 0) return "0%";
+        if (capacity == usage) return "100%";
+
+        int percentage = Convert.ToInt32(Math.Ceiling((float)usage * 100f / (float)capacity));
+        // If we rounded up to 100% but aren't actually capacity == usage then set to 99%
+        if (percentage == 100) percentage = 99; 
+
+        return $"{percentage}%";
+    }
+
+    private async Task NewNetworkGroup()
+    { 
+        newNetworkGroup = new NetworkGroup();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CreateNetworkGroup()
+    {
+        if (newNetworkGroup is null) return;
+
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        db.NetworkGroups.Add(newNetworkGroup);
+        await db.SaveChangesAsync();
+
+        newNetworkGroup = null;
+
+        dataRefresh.NetworkUsageNotify();
+    }
+
+    private async Task UpdateNetworkGroup()
+    {
+        if (editNetworkGroup is null) return;
+
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        db.Update(editNetworkGroup);
+        await db.SaveChangesAsync();
+
+        editNetworkGroup = null;
+
+        dataRefresh.NetworkUsageNotify();
+    }
+
+    private async Task DeleteNetworkGroup()
+    {
+        if (editNetworkGroup is null) return;
+
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        db.Remove(editNetworkGroup);
+        await db.SaveChangesAsync();
+
+        editNetworkGroup = null;
+
+        dataRefresh.NetworkUsageNotify();
+    }
+
+}

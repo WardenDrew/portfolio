@@ -1,0 +1,48 @@
+{
+  "Password": "REDACTED",
+  "AsteriskHost": "REDACTED",
+  "AsteriskAmiPort": 5038,
+  "AsteriskAmiUsername": "REDACTED",
+  "AsteriskAmiSecret": "REDACTED",
+  "PageGroups": [
+    {
+      "Extension": "580",
+      "Name": "Elementary with a really long name goes here to see what breaks!"
+    },
+    {
+      "Extension": "599",
+      "Name": "Test Group"
+    }
+  ],
+  "Schedules": [
+    {
+      "Id": "8b60a208-6011-423e-af53-3f23965fbe44",
+      "Name": "Testing Schedule",
+      "Events": [
+        {
+          "Time": "02:27:00",
+          "PageGroups": [
+            "580",
+            "599"
+          ]
+        },
+        {
+          "Time": "02:56:00",
+          "PageGroups": [
+            "599"
+          ]
+        }
+      ]
+    }
+  ],
+  "Plan": {
+    "Monday": "8b60a208-6011-423e-af53-3f23965fbe44",
+    "Tuesday": "8b60a208-6011-423e-af53-3f23965fbe44",
+    "Wednesday": "8b60a208-6011-423e-af53-3f23965fbe44",
+    "Thursday": "8b60a208-6011-423e-af53-3f23965fbe44",
+    "Friday": "8b60a208-6011-423e-af53-3f23965fbe44",
+    "Saturday": "8b60a208-6011-423e-af53-3f23965fbe44",
+    "Sunday": "8b60a208-6011-423e-af53-3f23965fbe44"
+  },
+  "Overrides": []
+}

@@ -1,0 +1,42 @@
+@page "/configuration"
+@layout AuthenticatedLayout
+
+<PageTitle>CCS Bell Schedule - Configuration</PageTitle>
+
+<div class="w-100 h-100">
+    <div class="row m-0">
+        <div class="col-12 col-md-6">
+            <h2 class="text-center">
+                <iconify-icon icon="mdi:file-cog-outline" inline/>
+                Staged Configuration
+            </h2>
+            <pre class="line-numbers" hidden="@hideCode">
+                <code class="language-json">
+                    @_settings.Staged.ToDisplayString()
+                </code>
+            </pre>
+        </div>
+        <div class="col-12 col-md-6 mt-4 mt-md-0">
+            <h2 class="text-center">
+                <iconify-icon icon="mdi:cog-clockwise" inline/>
+                Running Configuration
+            </h2>
+            <pre class="line-numbers" hidden="@hideCode">
+                <code class="language-json">
+                    @_settings.Running.ToDisplayString()
+                </code>
+            </pre>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool hideCode { get; set; } = true;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        hideCode = false;
+        await _js.InvokeVoidAsync("Prism.highlightAll");
+        StateHasChanged();
+    }
+}

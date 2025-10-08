@@ -1,0 +1,57 @@
+@layout CardLayout
+@page "/login"
+@using FreePbxTools.Web.Components.Layout
+@attribute [AllowAnonymous]
+
+<PageTitle>CCS Bell Schedule - Login</PageTitle>
+
+<div class="card-header text-center">
+    <h1>CCS Bell Schedule</h1>
+    <a href="http://@_settings.Running.AsteriskHost" target="_blank">Open the FreePBX admin panel</a>
+</div>
+<div class="card-body">
+    <form method="post" action="/api/login">
+        
+        <div class="d-flex">
+            <div class="flex-grow-1">
+                <input
+                    class="form-control"
+                    type="password"
+                    name="password"
+                    placeholder="Password"
+                    autocomplete="current-password"
+                    required
+                    autofocus/>
+            </div>
+            <div class="ms-3">
+                <button
+                    class="btn btn-primary"
+                    type="submit">
+                    Login
+                </button>
+            </div>
+        </div>
+
+        <input
+            type="hidden"
+            name="returnUrl"
+            value="@ReturnUrl"/>
+        <AntiforgeryToken/>
+    </form>
+</div>
+<div class="card-footer">
+    <p>
+        <span>Questions? Contact Andrew Haskell &commat; IronWatch LLC</span><br/>
+        <span class="ps-4">
+            <iconify-icon icon="mdi:phone" inline/> <a href="tel:15034626526">+1 (503) 462-6526</a>
+        </span><br/>
+        <span class="ps-4">
+            <iconify-icon icon="mdi:email" inline/> <a href="mailto:andrew@ironwatch.net">andrew@ironwatch.net</a>
+        </span>
+    </p>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+}

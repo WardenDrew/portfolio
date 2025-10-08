@@ -1,0 +1,67 @@
+﻿@inject NavigationManager nav
+@inject ProtectedLocalStorage protectedLocalStorage
+@inject WebAuthenticationService webAuth
+
+@if (passed == true)
+{
+    <CascadingValue Value="@this">
+        @ChildContent
+    </CascadingValue>
+}
+else if (passed == false)
+{
+    <h5>NOT AUTHORIZED</h5>
+}
+@code {
+    [Parameter]
+    public PermissionLevel Level { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    [Parameter]
+    public string? Redirect { get; set; }
+
+    [Parameter]
+    public string? Return { get; set; }
+
+    [CascadingParameter]
+    public AuthenticateUser? AuthenticateUser { get; set; }
+
+    private bool? passed;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (AuthenticateUser?.Ready != true) return;
+
+        if (Level == PermissionLevel.Unauthenticated)
+        {
+            passed = true;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        if (AuthenticateUser.AccessToken is null)
+        {
+            if (Redirect is null)
+            {
+                Redirect = nav.Uri;
+            }
+
+            Dictionary<string, string?> queryParams = new();
+            queryParams.Add("redirect", Redirect);
+            if (Return is not null) queryParams.Add("return", Return);
+
+            nav.NavigateTo($"/login{QueryString.Create(queryParams).ToUriComponent()}");
+            return;
+        }
+        else if (AuthenticateUser.AccessToken.PermissionLevel < Level)
+        {
+            passed = false;
+            return;
+        }
+
+        passed = true;
+        await InvokeAsync(StateHasChanged);
+    }
+}

@@ -1,0 +1,487 @@
+@using System.Text.Json
+<table class="table table-striped table-sm">
+    <thead>
+    <tr>
+        @foreach (Header header in this.orderedHeaders)
+        {
+            <th
+                scope="col"
+                style="@(this.headerWidthStyles.GetValueOrDefault(header.Key))">
+                @header.Value
+            </th>
+        }
+        <th scope="col" style="width: 10rem"></th>
+    </tr>
+    </thead>
+    <tbody>
+    @foreach (Row row in Rows.OrderBy(x => x.RowKey))
+    {
+        @if (!this.Disabled && 
+            !this.DisableEdit && 
+            !row.Disabled && 
+            !row.DisableEdit && 
+            editingRow?.RowKey != row.RowKey)
+        {
+            <tr>
+                @foreach (Header header in this.orderedHeaders)
+                {
+                    <td style="@(this.headerWidthStyles.GetValueOrDefault(header.Key))" class="align-middle">
+                        @row.Fields.GetValueOrDefault(header.Key)?.Value
+                    </td>
+                }
+                <td style="width: 10rem">
+                    <button
+                        class="btn btn-warning"
+                        @onclick="() => EditStart(row)"
+                        disabled="@(this.isThinking ||
+                            this.Disabled || 
+                            this.DisableEdit || 
+                            row.Disabled || 
+                            row.DisableEdit || 
+                            editingRow != null)">
+                        Edit
+                    </button>
+                    <button
+                        class="btn btn-danger"
+                        @onclick="() => Delete(row)"
+                        disabled="@(this.isThinking ||
+                            this.Disabled || 
+                            this.DisableDelete || 
+                            row.Disabled || 
+                            row.DisableDelete || 
+                            editingRow != null)">
+                        Remove
+                    </button>
+                </td>
+            </tr>
+        }
+        else if (editingRow?.RowKey == row.RowKey)
+        {
+            <tr>
+                @foreach (Header header in this.orderedHeaders)
+                {
+                    <td style="@(this.headerWidthStyles.GetValueOrDefault(header.Key))">
+                        <input
+                            class="form-control"
+                            type="text"
+                            value="@(row.Fields.GetValueOrDefault(header.Key)?.Value)"
+                            @onchange="@((e) => ChangeFieldValue(e, header.Key, this.editingRow))"
+                            disabled="@(this.isThinking ||
+                                this.Disabled ||
+                                this.DisableEdit ||
+                                row.Disabled ||
+                                row.DisableEdit)"/>
+                    </td>
+                }
+                <td style="width: 10rem">
+                    <button
+                        class="btn btn-primary"
+                        @onclick="() => EditSave(row)"
+                        disabled="@(this.isThinking ||
+                            this.Disabled || 
+                            this.DisableEdit || 
+                            row.Disabled || 
+                            row.DisableEdit)">
+                        Save
+                    </button>
+                    <button
+                        class="btn btn-secondary"
+                        @onclick="() => EditCancel(row)"
+                        disabled="@(this.isThinking ||
+                            this.Disabled || 
+                            this.DisableEdit || 
+                            row.Disabled || 
+                            row.DisableEdit)">
+                        Cancel
+                    </button>
+                </td>
+            </tr>
+        }
+    }
+
+    @if (!this.Disabled && 
+        !this.DisableAdd && 
+        addRow is not null)
+    {
+        <tr>
+            @foreach (Header header in this.orderedHeaders)
+            {
+                <td style="@(this.headerWidthStyles.GetValueOrDefault(header.Key))">
+                    <input
+                        class="form-control"
+                        type="text"
+                        value="@(this.addRow.Fields.GetValueOrDefault(header.Key)?.Value)"
+                        @onchange="@((e) => ChangeFieldValue(e, header.Key, this.addRow))"
+                        disabled="@(this.isThinking || 
+                            this.Disabled || 
+                            this.DisableAdd || 
+                            this.editingRow != null)"/>
+                </td>
+            }
+            <td style="width: 10rem">
+                <button
+                    class="btn btn-primary w-100"
+                    @onclick="Add"
+                    disabled="@(this.isThinking ||
+                        this.Disabled || 
+                        this.DisableAdd || 
+                        this.editingRow != null)">
+                    Add
+                </button>
+            </td>
+        </tr>
+    }
+    </tbody>
+</table>
+@if (Rows.Count == 0)
+{
+    <p class="text-center">No data</p>
+}
+
+@code {
+
+    // ReSharper disable PropertyCanBeMadeInitOnly.Global
+    // ReSharper disable AutoPropertyCanBeMadeGetOnly.Global
+    
+    public class Header
+    {
+        public required string Key { get; set; }
+        public required string Value { get; set; }
+        public int Order { get; set; } = 0;
+        public string? Width { get; set; }
+    }
+    
+    public class Row
+    {
+        public required string RowKey { get; set; }
+        public Dictionary<string, Field> Fields { get; set; } = [];
+        public bool Disabled { get; set; } = false;
+        public bool DisableEdit { get; set; } = false;
+        public bool DisableDelete { get; set; } = false;
+        
+        public Row DeepCopy()
+        {
+            return JsonSerializer.Deserialize<Row>(JsonSerializer.Serialize(this))
+                ?? throw new InvalidOperationException("Failed to Deep Copy using JSON");
+        }
+    }
+    
+    public class Field
+    {
+        public required string Value { get; set; }
+    }
+
+    public class OnRowEventArgs
+    {
+        public required Row Row { get; set; }
+        public bool Canceled { get; private set; }
+
+        public void Cancel()
+        {
+            this.Canceled = true;
+        }
+    }
+
+    public class OnErrorEventArgs
+    {
+        public required string Message { get; set; }
+    }
+    
+    [Parameter, EditorRequired,]
+    public required string KeyField { get; set; }
+    
+    [Parameter, EditorRequired,]
+    public required List<Header> Headers { get; set; }
+
+    [Parameter]
+    public List<Row> Rows { get; set; } = [];
+
+    [Parameter]
+    public Row DefaultRow { get; set; } = new()
+    {
+        RowKey = string.Empty,
+    };
+
+    [Parameter]
+    public bool AllowDuplicateKeys { get; set; } = false;
+
+    [Parameter]
+    public bool Disabled { get; set; } = false;
+
+    [Parameter]
+    public bool DisableAdd { get; set; } = false;
+
+    [Parameter]
+    public bool DisableEdit { get; set; } = false;
+
+    [Parameter]
+    public bool DisableDelete { get; set; } = false;
+
+    [Parameter]
+    public EventCallback<OnRowEventArgs> OnEditStart { get; set; }
+    
+    [Parameter]
+    public EventCallback<OnRowEventArgs> OnEditSave { get; set; }
+    
+    [Parameter]
+    public EventCallback<OnRowEventArgs> OnEditCancel { get; set; }
+    
+    [Parameter]
+    public EventCallback<OnRowEventArgs> OnDelete { get; set; }
+    
+    [Parameter]
+    public EventCallback<OnRowEventArgs> OnAdd { get; set; }
+    
+    [Parameter]
+    public EventCallback<OnErrorEventArgs> ErrorHandler { get; set; }
+    
+    // ReSharper restore PropertyCanBeMadeInitOnly.Global
+    // ReSharper restore AutoPropertyCanBeMadeGetOnly.Global
+    
+    private List<Header> orderedHeaders = [];
+    private readonly Dictionary<string, string?> headerWidthStyles = new();
+    private Row? addRow = null;
+    private Row? editingRow = null;
+    private bool isThinking = false;
+
+    private async Task EditStart(Row row)
+    {
+        isThinking = true;
+        try
+        {
+            OnRowEventArgs rowEventArgs = new()
+            {
+                Row = row,
+            };
+            
+            await OnEditStart.InvokeAsync(rowEventArgs);
+
+            if (rowEventArgs.Canceled)
+            {
+                return;
+            }
+            
+            editingRow = row.DeepCopy();
+        }
+        finally
+        {
+            isThinking = false;
+        }
+    }
+    
+    private async Task EditSave(Row row)
+    {
+        isThinking = true;
+        try
+        {
+            if (editingRow is null)
+            {
+                await Error("Cannot save an edited row if there is no row being edited!");
+                return;
+            }
+
+            if (!editingRow.Fields.TryGetValue(KeyField, out Field? keyField))
+            {
+                await Error("Could not locate the primary key field!");
+                return;
+            }
+
+            editingRow.RowKey = keyField.Value;
+            
+            if (this.editingRow.RowKey != row.RowKey &&
+                DoesRowKeyCollide(this.editingRow.RowKey))
+            {
+                await Error("An entry with this key already exists!");
+                return;
+            }
+
+            OnRowEventArgs rowEventArgs = new()
+            {
+                Row = editingRow,
+            };
+            
+            await OnEditSave.InvokeAsync(rowEventArgs);
+
+            if (rowEventArgs.Canceled)
+            {
+                return;
+            }
+
+            Rows.Remove(row);
+            Rows.Add(editingRow.DeepCopy());
+        }
+        finally
+        {
+        
+            editingRow = null;
+            isThinking = false;
+        }
+    }
+
+    private async Task EditCancel(Row row)
+    {
+        isThinking = true;
+        try
+        {
+            if (editingRow is null)
+            {
+                await Error("Cannot cancel an edited row if there is no row being edited!");
+                return;
+            }
+        
+            OnRowEventArgs rowEventArgs = new()
+            {
+                Row = row,
+            };
+            
+            await OnEditCancel.InvokeAsync(rowEventArgs);
+
+            if (rowEventArgs.Canceled)
+            {
+                return;
+            }
+        }
+        finally
+        {
+            editingRow = null;
+            isThinking = false;
+        }
+    }
+    
+    private async Task Delete(Row row)
+    {
+        isThinking = true;
+        try
+        {
+            OnRowEventArgs rowEventArgs = new()
+            {
+                Row = row,
+            };
+            
+            await OnDelete.InvokeAsync(rowEventArgs);
+
+            if (rowEventArgs.Canceled)
+            {
+                return;
+            }
+
+            Rows.Remove(row);
+        }
+        finally
+        {
+            isThinking = false;
+        }
+    }
+    
+    private async Task Add()
+    {
+        isThinking = true;
+        try
+        {
+            if (this.addRow is null)
+            {
+                await Error("Cannot add a new row if there is no row being added!");
+                return;
+            }
+            
+            if (!addRow.Fields.TryGetValue(KeyField, out Field? keyField))
+            {
+                await Error("Could not locate the primary key field!");
+                return;
+            }
+
+            addRow.RowKey = keyField.Value;
+            
+            if (DoesRowKeyCollide(this.addRow.RowKey))
+            {
+                await Error("An entry with this key already exists!");
+                return;
+            }
+            
+            OnRowEventArgs rowEventArgs = new()
+            {
+                Row = this.addRow,
+            };
+            
+            await OnAdd.InvokeAsync(rowEventArgs);
+
+            if (rowEventArgs.Canceled)
+            {
+                return;
+            }
+            
+            Rows.Add(this.addRow.DeepCopy());
+        }
+        finally
+        {
+            this.addRow = DefaultRow.DeepCopy();
+            isThinking = false;
+        }
+    }
+
+    private async Task Error(string message)
+    {
+        await ErrorHandler.InvokeAsync(new()
+        {
+            Message = message,
+        });
+    }
+
+    private void RecalculateHeaders()
+    {
+        isThinking = true;
+        try
+        {
+            orderedHeaders = Headers
+                .OrderBy(x => x.Order)
+                .ToList();
+                
+            foreach (Header header in orderedHeaders)
+            {
+                headerWidthStyles.Add(header.Key, header.Width is not null ? $"width: {header.Width};" : "");
+            }
+        }
+        finally
+        {
+            isThinking = false;
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        if (Headers is null)
+        {
+            throw new InvalidOperationException("EditTable.Headers is required and must be set! This is a developer error");
+        }
+        
+        if (KeyField is null)
+        {
+            throw new InvalidOperationException("EditTable.KeyField is required and must be set! This is a developer error");
+        }
+        
+        RecalculateHeaders();
+        addRow = DefaultRow.DeepCopy();
+    }
+    
+    private void ChangeFieldValue(ChangeEventArgs e, string key, Row row)
+    {
+        Field? field = row.Fields.GetValueOrDefault(key);
+        if (field is not null)
+        {
+            field.Value = e.Value?.ToString() ?? "";
+            return;
+        }
+
+        row.Fields.Add(key, new()
+        {
+            Value = e.Value?.ToString() ?? "",
+        });
+    }
+
+    private bool DoesRowKeyCollide(string key)
+    {
+        return !AllowDuplicateKeys && Rows
+            .Where(x => x.RowKey.Equals(key, StringComparison.Ordinal))
+            .Any();
+    }
+}

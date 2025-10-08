@@ -1,0 +1,58 @@
+@page "/schedules"
+@layout AuthenticatedLayout
+
+<PageTitle>CCS Bell Schedule - Schedules</PageTitle>
+
+<div class="container">
+    <h2 class="text-center">
+        <iconify-icon icon="mdi:format-list-numbered" inline/>
+        Schedules
+    </h2>
+
+    <table class="table table-striped table-sm">
+        <thead>
+        <tr>
+            <th scope="col">
+                Schedule
+            </th>
+            <th scope="col" style="width: 10rem">
+                Event Count
+            </th>
+            <th scope="col" class="text-end" style="width: 12rem">
+                <button class="btn btn-primary" @onclick="@(() => _navigation.NavigateTo("/schedules/new"))">
+                    <iconify-icon icon="mdi:playlist-plus" inline/>
+                    New Schedule
+                </button>
+            </th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (SettingsService.ScheduleModel schedule in _settings.Staged.Schedules)
+        {
+            <tr>
+                <td class="align-middle">
+                    <span>@schedule.Name</span>
+                    <span class="text-muted">@schedule.Id</span>
+                </td>
+                <td class="align-middle" style="width: 12rem">
+                    @schedule.Events.Count
+                </td>
+                <td class="text-end" style="width: 12rem">
+                    <button class="btn btn-outline-warning" @onclick="@(() => _navigation.NavigateTo($"/schedules/{schedule.Id}"))">
+                        <iconify-icon icon="mdi:playlist-plus" inline/>
+                        Edit
+                    </button>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+    @if (_settings.Staged.Schedules.Count == 0)
+    {
+        <p class="text-center">No data</p>
+    }
+</div>
+
+@code {
+
+}

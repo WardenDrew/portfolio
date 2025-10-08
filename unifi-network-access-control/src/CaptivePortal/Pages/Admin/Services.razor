@@ -1,0 +1,112 @@
+﻿@page "/admin/services"
+@layout AdminLayout
+@using CaptivePortal.Daemons
+@inject DaemonInteractionService daemonService
+
+<PageTitle>Admin > Services</PageTitle>
+
+<div class="container-sm" style="max-width: 720px;">
+    <h1 class="text-center mt-sm-4">Services</h1>
+    <div class="alert alert-danger mt-2" role="alert">
+        <p class="text-center">
+           Restarting the Web Portal will disconnect you from this page, 
+           and if there is an error will require server side CLI access to restart the application!
+        </p>
+    </div>
+
+    <div class="row g-4" style="max-width:800px;">
+        <div class="col-12 col-sm-6">
+            <div class="card p-2">
+                <h3 class="text-center">RADIUS Authorization</h3>
+                <p class="px-2">
+                    This service receives requests from Access Points when a device tries to connect to the SSID. 
+                    It looks up device details from the database and is responsible for telling the AP what VLAN to put a client in.
+                </p>
+                @if (RadiusAuthorizationRunning == true)
+                {
+                    <div class="alert alert-success text-center py-2" role="alert"><h4>RUNNING</h4></div>
+                    <button class="btn btn-warning btn-lg mb-3" @onclick="@(async _ => { await daemonService.Restart<RadiusAuthorizationDaemon>(); Refresh(); })">Restart RADIUS Authorization</button>
+                    <button class="btn btn-danger" @onclick="@(async _ => { await daemonService.Stop<RadiusAuthorizationDaemon>(); Refresh(); })">Stop RADIUS Authorization</button>
+                }
+                else if (RadiusAuthorizationRunning == false)
+                {
+                    <div class="alert alert-danger text-center py-2" role="alert"><h4>STOPPED</h4></div>
+                    <button class="btn btn-success btn-lg" @onclick="@(_ => { daemonService.Start<RadiusAuthorizationDaemon>(); Refresh(); })">Start RADIUS Authorization</button>
+                }
+            </div>
+        </div>
+        <div class="col-12 col-sm-6">
+            <div class="card p-2">
+                <h3 class="text-center">RADIUS Accounting</h3>
+                <p class="px-2">
+                    This service receives reports from Access Points when a device connects and disconnects.
+                    These reports are critical for automatic device disconnection, and for tracking device staleness.
+                </p>
+                @if (RadiusAccountingRunning == true)
+                {
+                    <div class="alert alert-success text-center py-2" role="alert"><h4>RUNNING</h4></div>
+                    <button class="btn btn-warning btn-lg mb-3" @onclick="@(async _ => { await daemonService.Restart<RadiusAccountingDaemon>(); Refresh(); })">Restart RADIUS Accounting</button>
+                    <button class="btn btn-danger" @onclick="@(async _ => { await daemonService.Stop<RadiusAccountingDaemon>(); Refresh(); })">Stop RADIUS Accounting</button>
+                }
+                else if (RadiusAccountingRunning == false)
+                {
+                    <div class="alert alert-danger text-center py-2" role="alert"><h4>STOPPED</h4></div>
+                    <button class="btn btn-success btn-lg" @onclick="@(_ => { daemonService.Start<RadiusAccountingDaemon>(); Refresh(); })">Start RADIUS Accounting</button>
+                }
+            </div>
+        </div>
+        <div class="col-12 col-sm-6">
+            <div class="card p-2">
+                <h3 class="text-center">DNS Redirection</h3>
+                <p class="px-2">
+                    This service responds to all "A" DNS queries with the address of the Captive Portal.
+                    This is the first step in client device captive portal detection.
+                </p>
+                @if (DnsRedirectorRunning == true)
+                {
+                    <div class="alert alert-success text-center py-2" role="alert"><h4>RUNNING</h4></div>
+                    <button class="btn btn-warning btn-lg mb-3" @onclick="@(async _ => { await daemonService.Restart<DnsDaemon>(); Refresh(); })">Restart DNS Redirection</button>
+                    <button class="btn btn-danger" @onclick="@(async _ => { await daemonService.Stop<DnsDaemon>(); Refresh(); })">Stop DNS Redirection</button>
+                }
+                else if (DnsRedirectorRunning == false)
+                {
+                    <div class="alert alert-danger text-center py-2" role="alert"><h4>STOPPED</h4></div>
+                    <button class="btn btn-success btn-lg" @onclick="@(_ => { daemonService.Start<DnsDaemon>(); Refresh(); })">Start DNS Redirection</button>
+                }
+            </div>
+        </div>
+        <div class="col-12 col-sm-6">
+            <div class="card p-2">
+                <h3 class="text-center">Web Portal</h3>
+                <p class="px-2">
+                    This is the Web Portal that handles the Captive Device 302 Redirection, Captive Portal, and the Control Panel.
+                    This is what you are currently connected to!
+                </p>
+                <div class="alert alert-success text-center py-2" role="alert"><h4>RUNNING</h4></div>
+                <button class="btn btn-warning btn-lg mb-3" @onclick="@(async _ => { await daemonService.Restart<WebDaemon>(); Refresh(); })">Restart Web Portal</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool? RadiusAuthorizationRunning;
+    private bool? RadiusAccountingRunning;
+    private bool? DnsRedirectorRunning;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        Refresh();
+    }
+
+    private void Refresh()
+    {
+        RadiusAuthorizationRunning = daemonService.GetRunning<RadiusAuthorizationDaemon>();
+        RadiusAccountingRunning = daemonService.GetRunning<RadiusAccountingDaemon>();
+        DnsRedirectorRunning = daemonService.GetRunning<DnsDaemon>();
+
+        StateHasChanged();
+    }
+}

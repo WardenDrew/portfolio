@@ -1,0 +1,140 @@
+@page "/overrides/{OverrideId:guid}"
+@page "/overrides/new"
+@using FreePbxTools.Web.Helpers
+@layout AuthenticatedLayout
+
+<PageTitle>CCS Bell Schedule - Edit Override</PageTitle>
+
+<div class="container">
+    <h2 class="text-center">
+        <iconify-icon icon="mdi:calendar-alert" inline/>
+        Edit Override
+    </h2>
+    <div class="card">
+        <div class="card-body">
+            @if (OverrideEntry is not null)
+            {
+                <EditForm Model="OverrideEntry">
+                    <div class="d-flex justify-content-between align-items-end">
+                        <label class="form-label">Reason</label>
+                        <div class="d-flex mb-2">
+                            <button
+                                class="btn btn-outline-info"
+                                @onclick="@(() => _navigation.NavigateTo("/overrides"))">
+                                Cancel without Saving
+                            </button>
+                            <button 
+                                class="btn btn-primary ms-2"
+                                @onclick="@(Save)"
+                                disabled="@(OverrideEntry.Date is null || string.IsNullOrWhiteSpace(OverrideEntry.Reason))">
+                                Save and Close
+                            </button>
+                        </div>
+                    </div>
+                    <InputText
+                        class="form-control"
+                        placeholder="Reason for the override"
+                        @bind-Value="OverrideEntry.Reason"/>
+                    
+                    <label class="form-label mt-4">Date</label>
+                    <InputDate 
+                        Type="InputDateType.Date"
+                        @bind-Value="@OverrideEntry.Date"
+                        class="form-control"/>
+                    
+                    <label class="form-label mt-4">Schedule</label>
+                    <InputSelect
+                        class="form-select"
+                        TValue="Guid?"
+                        @bind-Value="@OverrideEntry.Schedule">
+                        <option value="">None</option>
+                        @foreach (SettingsService.ScheduleModel schedule in _settings.Staged.Schedules)
+                        {
+                            <option value="@schedule.Id">@schedule.Name</option>
+                        }
+                    </InputSelect>
+                </EditForm>
+            }
+            
+            <p class="text-center text-muted p-0 mb-0 mt-4">
+                Id: @OverrideEntry?.Id
+            </p>
+            
+            <div class="d-flex justify-content-center mt-2">
+                <button class="btn btn-outline-danger" @onclick="Delete">
+                    Delete Override
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+
+    [Parameter]
+    public Guid? OverrideId { get; set; }
+    
+    private SettingsService.OverrideModel? OverrideEntry { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (OverrideId is not null)
+        {
+            OverrideEntry = Deep.Copy(
+                _settings.Staged.Overrides
+                    .Where(x => x.Id == OverrideId)
+                    .FirstOrDefault()
+            );
+
+            if (OverrideEntry is null)
+            {
+                _navigation.NavigateTo("/overrides/new");
+            }
+            
+            return;
+        }
+        
+        OverrideEntry = new()
+        {
+            Id = Guid.NewGuid(),
+        };
+    }
+
+    private void Save()
+    {
+        if (OverrideEntry is null) return;
+        
+        SettingsService.OverrideModel? existing = _settings.Staged.Overrides
+            .Where(x => x.Id == OverrideEntry.Id)
+            .FirstOrDefault();
+        if (existing is not null)
+        {
+            existing.Date = OverrideEntry.Date;
+            existing.Reason = OverrideEntry.Reason;
+            existing.Schedule = OverrideEntry.Schedule;
+        }
+        else
+        {
+            _settings.Staged.Overrides.Add(OverrideEntry);
+        }
+
+        _settings.Staged.Overrides = _settings.Staged.Overrides
+            .OrderBy(x => x.Date)
+            .ToList();
+
+        _settings.CheckDirty();
+        _navigation.NavigateTo("/overrides");
+    }
+
+    private void Delete()
+    {
+        if (OverrideEntry is null) return;
+        
+        _settings.Staged.Overrides = _settings.Staged.Overrides
+            .Where(x => x.Id != OverrideId)
+            .ToList();
+            
+        _settings.CheckDirty();
+        _navigation.NavigateTo("/overrides");
+    }
+}

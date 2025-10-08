@@ -1,0 +1,8 @@
+#!/bin/bash
+
+echo "Cleaning environment..."
+
+rm -rf ./config
+rm -rf ./projects
+
+echo "Done!"

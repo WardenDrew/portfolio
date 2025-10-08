@@ -1,0 +1,153 @@
+@page "/pagegroups"
+@layout AuthenticatedLayout
+@using FreePbxTools.Web.Components.EditTable
+
+<PageTitle>CCS Bell Schedule - Page Groups</PageTitle>
+
+<div class="container">
+    <h2 class="text-center">
+        <iconify-icon icon="mdi:bullhorn" inline/>
+        Page Groups
+    </h2>
+    <EditTable 
+        Headers="@headers" 
+        KeyField="extension" 
+        Rows="@rows" 
+        OnAdd="OnAdd"
+        OnEditSave="OnEditSave"
+        OnDelete="OnDelete"
+        ErrorHandler="@(e => SetError(e.Message))"/>
+
+    <div style="position: fixed; bottom: 0; right: 0;">
+        <div style="max-width: 800px;" class="alert alert-danger alert-dismissible fade m-2 @(lasterror is null ? "" : "show")">
+            <strong>@lasterror</strong>
+            <button type="button" class="btn-close" @onclick="@(() => lasterror = null)"></button>
+        </div>
+    </div>
+</div>
+
+@code {
+
+    private void SetTimeout(int milliseconds, Action action)
+    {
+        Task.Delay(milliseconds)
+            .ContinueWith(_ =>
+            {
+                action.Invoke();
+                // If updating the UI, ensure it's on the UI thread
+                InvokeAsync(StateHasChanged); 
+            }, TaskScheduler.FromCurrentSynchronizationContext()); // Ensures continuation runs on UI thread
+    }
+
+    private void SetError(string message)
+    {
+        this.lasterror = message;
+        SetTimeout(3000, () =>
+        {
+            this.lasterror = null;
+        });
+    }
+    private string? lasterror = null;
+
+    private readonly List<EditTable.Header> headers = [
+        new() {
+            Key = "extension",
+            Value = "Extension",
+            Width = "10rem",
+        },
+        new() {
+            Key = "name",
+            Value = "Name",
+        },
+    ];
+
+    private List<EditTable.Row> rows = [];
+
+    private void ReloadRows()
+    {
+        rows = _settings.Staged.PageGroups
+            .Select(x => new EditTable.Row()
+            {
+                RowKey = x.Extension,
+                Fields =
+                {
+                    ["extension"] = new()
+                    {
+                        Value = x.Extension,
+                    },
+                    ["name"] = new()
+                    {
+                        Value = x.Name,
+                    },
+                },
+            }).ToList();
+    }
+
+    protected override void OnInitialized()
+    {
+        ReloadRows();
+        StateHasChanged();
+    }
+
+    private void OnAdd(EditTable.OnRowEventArgs rowEventArgs)
+    {
+        if (!int.TryParse(rowEventArgs.Row.Fields["extension"].Value, out _))
+        {
+            SetError("Extension must be numeric");
+            return;
+        }
+
+        if (_settings.Staged.PageGroups
+            .Where(x => x.Extension == rowEventArgs.Row.Fields["extension"].Value)
+            .Any())
+        {
+            SetError("Extension must be unique");
+            return;
+        }
+        
+        _settings.Staged.PageGroups.Add(new()
+        {
+            Extension = rowEventArgs.Row.Fields["extension"].Value,
+            Name = rowEventArgs.Row.Fields["name"].Value,
+        });
+        
+        _settings.Staged.PageGroups =
+            _settings.Staged.PageGroups
+                .OrderBy(x => x.Extension)
+                .ToList();
+                
+        _settings.CheckDirty();
+    }
+    
+    private void OnEditSave(EditTable.OnRowEventArgs rowEventArgs)
+    {
+        SettingsService.PageGroupModel? pageGroup = _settings.Staged.PageGroups
+            .FirstOrDefault(x => x.Extension == rowEventArgs.Row.Fields["extension"].Value);
+        if (pageGroup is null)
+        {
+            SetError("Could not find that extension to edit!");
+            return;
+        }
+
+        pageGroup.Extension = rowEventArgs.Row.Fields["extension"].Value;
+        pageGroup.Name = rowEventArgs.Row.Fields["name"].Value;
+        
+        _settings.CheckDirty();
+    }
+    
+    private void OnDelete(EditTable.OnRowEventArgs rowEventArgs)
+    {
+        string extension = rowEventArgs.Row.Fields["extension"].Value;
+        
+        _settings.Staged.Schedules
+            .ForEach(schedule => 
+                schedule.Events.ForEach(scheduleEvent => 
+                    scheduleEvent.PageGroups.Remove(extension)));
+        
+        _settings.Staged.PageGroups = _settings.Staged.PageGroups
+            .Where(x => x.Extension != extension)
+            .ToList();
+                
+        _settings.CheckDirty();
+    }
+}

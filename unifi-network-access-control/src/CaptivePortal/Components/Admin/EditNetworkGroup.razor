@@ -1,0 +1,95 @@
+﻿@using CaptivePortal.Database.Entities
+@using System.Text.RegularExpressions
+
+@if (NetworkGroup is not null)
+{
+    <form class="d-block w-100" @onsubmit="@(async _ => { await Submit(); })">
+        <label class="d-block">Network Group Name</label>
+        <input class="d-block w-100" type="text" @bind="NetworkGroup.Name" @ref="firstField" />
+
+        <label class="d-block">Description</label>
+        <textarea class="d-block w-100" rows="4" @bind="NetworkGroup.Description"/>
+
+        <div class="mt-2 form-check form-switch d-flex align-items-center">
+            <input type="checkbox" class="form-check-input" style="padding: 12px 24px;" role="switch" @onchange="GuestChanged" checked="@NetworkGroup.Guest"/>
+            <label class="form-check-label ms-2">For Guest Access</label>
+        </div>
+
+        <div class="mt-2 form-check form-switch d-flex align-items-center">
+            <input type="checkbox" class="form-check-input" style="padding: 12px 24px;" role="switch" @bind="NetworkGroup.IsPool" disabled="@NetworkGroup.Guest"/>
+            <label class="form-check-label ms-2">Pool Networks</label>
+        </div>
+
+        <div class="d-flex justify-content-between mt-3">
+            @if (OnDelete.HasDelegate)
+            {
+                <div>
+                    <button class="d-block btn btn-danger" type="button" @onclick="async _ => await ResetFocus(OnDelete)">Delete</button>
+                </div>
+            }
+            <div class="flex-grow-1 d-flex justify-content-end">
+                <button class="d-block btn btn-primary" type="submit">Save</button>
+                @if (OnCancel.HasDelegate)
+                {
+                    <button class="d-block btn btn-outline-secondary ms-2" type="button" @onclick="async _ => await ResetFocus(OnCancel)">Cancel</button>
+                }
+            </div>
+        </div>
+        
+    </form>
+}
+
+@code {
+    [Parameter]
+    public NetworkGroup? NetworkGroup { get; set; }
+
+    [Parameter] 
+    public EventCallback OnSubmit { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    [Parameter]
+    public EventCallback OnDelete { get; set; }
+
+    private ElementReference firstField;
+    private bool didFocusFirstField;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (NetworkGroup is not null &&
+            didFocusFirstField == false)
+        {
+            didFocusFirstField = true;
+            await firstField.FocusAsync();
+        }
+    }
+
+    private void GuestChanged(ChangeEventArgs e)
+    {
+        if (NetworkGroup is null) return;
+        NetworkGroup.Guest = (bool?)(e.Value) ?? false;
+        if (NetworkGroup.Guest) NetworkGroup.IsPool = true;
+
+        StateHasChanged();
+    }
+
+    public async Task Submit()
+    {
+        if (NetworkGroup is null) return;
+
+        if (NetworkGroup.Description is not null)
+        {
+            NetworkGroup.Description = Regex.Replace(NetworkGroup.Description, @"\r\n?|\n", " ");
+        }
+
+        await ResetFocus(OnSubmit);
+    }
+
+    private async Task ResetFocus(EventCallback callback)
+    {
+        didFocusFirstField = false;
+
+        await callback.InvokeAsync();
+    }
+}

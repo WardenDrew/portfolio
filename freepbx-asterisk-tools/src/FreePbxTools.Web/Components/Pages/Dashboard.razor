@@ -1,0 +1,134 @@
+﻿@page "/"
+@layout AuthenticatedLayout
+@implements IDisposable
+@inject PagingService pagingService
+
+<PageTitle>CCS Bell Schedule - Dashboard</PageTitle>
+
+<div class="container">
+    <div class="card">
+        <div class="card-header">
+            <h4 class="text-center">Status</h4>
+        </div>
+        <div class="card-body">
+            <div class="form-label">
+                <span>Current Regular Schedule:</span>
+                <span class="text-muted"> @(this.currentRegularSchedule?.Name ?? "None") </span>
+                <span class="text-muted">@(this.currentRegularSchedule?.Id)</span>
+            </div>
+            <div class="form-label mt-2">
+                <span>Current Override:</span>
+                <span class="text-muted"> @(this.currentOverride?.Reason ?? "None") </span>
+                <span class="text-muted">@(this.currentOverride?.Id)</span>
+            </div>
+            <div class="form-label mt-2">
+                <span>Current Override Schedule:</span>
+                <span class="text-muted"> @(this.currentOverrideSchedule?.Name ?? "None") </span>
+                <span class="text-muted">@(this.currentOverrideSchedule?.Id)</span>
+            </div>
+            <div class="form-label">
+                <span>Next Event Today:</span>
+                <span class="text-muted"> @(this.nextEvent?.Time?.ToString() ?? "None") </span>
+                <span class="text-muted">
+                    @(this.nextEvent?.PageGroups != null && this.nextEvent.PageGroups.Count > 0 ? $"paging {string.Join(", ", this.nextEvent.PageGroups)}" : "")
+                </span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card mt-4">
+        <div class="card-header">
+            <h4 class="text-center">Manually Trigger Bells</h4>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                @foreach (SettingsService.PageGroupModel pageGroup in _settings.Running.PageGroups)
+                {
+                    <div class="col-12 col-sm-2 col-md-3">
+                        <button class="btn btn-lg btn-outline-primary w-100 text-truncate" @onclick="async () => await StartPage(pageGroup.Extension)" disabled="@(this.pageRunning)">
+                            @($"{pageGroup.Extension}: {pageGroup.Name}")
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+
+@code {
+
+    private readonly CancellationTokenSource cts = new();
+    private Timer? dashboardUpdateTimer = null;
+    
+    private SettingsService.OverrideModel? currentOverride = null;
+    private SettingsService.ScheduleModel? currentOverrideSchedule = null;
+    private Guid? currentRegularScheduleId = null;
+    private SettingsService.ScheduleModel? currentRegularSchedule = null;
+    private SettingsService.EventModel? nextEvent = null;
+
+    private bool pageRunning = false;
+
+    protected override void OnInitialized()
+    {
+        dashboardUpdateTimer = new(_ =>
+        {
+            DateTime now = DateTime.Now;
+            
+            currentOverride = _settings.Running.Overrides
+                .Where(x => 
+                    x.Date != null &&
+                    x.Date.Value.Year == now.Year &&
+                    x.Date.Value.Month == now.Month &&
+                    x.Date.Value.Day == now.Day)
+                .FirstOrDefault();
+
+            currentOverrideSchedule = _settings.Running.Schedules
+                .Where(x => x.Id == currentOverride?.Schedule)
+                .FirstOrDefault();
+            
+            currentRegularScheduleId = now.DayOfWeek switch
+            {
+                DayOfWeek.Monday => _settings.Running.Plan.Monday,
+                DayOfWeek.Tuesday => _settings.Running.Plan.Tuesday,
+                DayOfWeek.Wednesday => _settings.Running.Plan.Wednesday,
+                DayOfWeek.Thursday => _settings.Running.Plan.Thursday,
+                DayOfWeek.Friday => _settings.Running.Plan.Friday,
+                DayOfWeek.Saturday => _settings.Running.Plan.Saturday,
+                DayOfWeek.Sunday => _settings.Running.Plan.Sunday,
+                _ => null,
+            };
+
+            currentRegularSchedule = _settings.Running.Schedules
+                .Where(x => x.Id == this.currentRegularScheduleId)
+                .FirstOrDefault();
+
+            SettingsService.ScheduleModel? inEffectSchedule = 
+                this.currentOverrideSchedule ?? this.currentRegularSchedule;
+
+            nextEvent = inEffectSchedule?.Events
+                .Where(x => x.Time > new TimeOnly(now.Hour, now.Minute))
+                .FirstOrDefault();
+
+            InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.Zero, TimeSpan.FromMilliseconds(100));
+    }
+
+    public async Task StartPage(string extension)
+    {
+        pageRunning = true;
+        StateHasChanged();
+        await pagingService.PageAsync(extension, cts.Token);
+        await Task.Delay(TimeSpan.FromSeconds(5));
+        pageRunning = false;
+    }
+
+    public void Dispose()
+    {
+        cts.Cancel();
+        cts.Dispose();
+
+        dashboardUpdateTimer?.Dispose();
+    }
+
+}

@@ -1,0 +1,301 @@
+﻿@page "/user"
+@layout UserLayout
+@inject IDbContextFactory<IronNacDbContext> dbFactory
+@inject NavigationManager nav
+@inject DataRefreshNotificationService dataRefresh
+@inject WebAuthenticationService webAuthService
+@inject RadiusDisconnectorService disconnector
+
+<PageTitle>User</PageTitle>
+
+@if (AuthenticateUser?.AccessToken is not null)
+{
+    <h3 class="text-center">Hello @AuthenticateUser.AccessToken.Name</h3>
+    <div class="d-flex flex-column flex-sm-row justify-content-center mt-3">
+        @if (AuthenticateUser.AccessToken.PermissionLevel >= PermissionLevel.Admin)
+        {
+            <button class="flex-grow-1 btn btn-outline-info btn-lg" @onclick="@(async _ => {nav.NavigateTo("/");})">Back to Portal Select</button>
+        }
+        <button class="btn btn-outline-warning btn-lg ms-sm-2 mt-2 mt-sm-0" @onclick="@(async _ => {nav.NavigateTo("/logout");})">Logout</button>
+    </div>
+    <hr/>
+
+    <h5 class="text-center">Account</h5>
+
+    <form @onsubmit="@(async _ => {await Debounce(); await ChangePasswordAsync();})">
+        @if (passwordValidation is not null)
+        {
+            <div class="alert alert-danger">@passwordValidation</div>
+        }
+        <h5>New Password:</h5>
+        <input class="d-block w-100" type="password" @bind="newPassword" autocomplete="new-password" disabled="@debounce"/>
+        <h5 class="mt-3">Confirm New Password:</h5>
+        <input class="d-block w-100" type="password" @bind="confirmPassword" autocomplete="new-password" disabled="@debounce"/>
+        <div class="d-flex flex-column flex-sm-row justify-content-end">
+            <button class="btn btn-primary mt-3" disabled="@debounce">Change Password</button>
+        </div>
+    </form>
+
+    <hr/>
+
+    <h5 class="text-center">Devices</h5>
+
+    <form class="d-flex flex-column flex-sm-row" @onsubmit="@(async _ => {await Debounce(); await DoSearch(); })">
+        <input class="flex-grow-1" type="search" @bind="search" disabled="@debounce"/>
+        <button class="btn btn-success ms-sm-2 mt-2 mt-sm-0" disabled="@debounce">Search</button>
+    </form>
+
+    <div class="d-flex flex-column align-items-center mt-3 mb-2">
+        <nav>
+            <ul class="pagination mb-1">
+                <li class="page-item">
+                    <button class="@($"page-link{(page < 2 ? " disabled" : "")}")" disabled="@(debounce || page < 2)" @onclick="@(async _ => {await Debounce(); await PreviousPage();})">
+                        <span class="mdi mdi-arrow-left-thick"></span>
+                    </button>
+                </li>
+                <li class="page-item active" aria-current="page">
+                    <span class="page-link">@(page)</span>
+                </li>
+                <li class="page-item">
+                    <button class="@($"page-link{(page >= totalPages ? " disabled" : "")}")" disabled="@(debounce || page >= totalPages)" @onclick="@(async _ => {await Debounce(); await NextPage(); })">
+                        <span class="mdi mdi-arrow-right-thick"></span>
+                    </button>
+                </li>
+            </ul>
+        </nav>
+        <span>Showing @(Math.Min(count, ((page - 1) * take) + 1))-@(Math.Min(count, ((page - 1) * take) + take + 1)) of @(count) Devices</span>
+    </div>
+
+    @foreach (Database.Entities.Device device in devices)
+    {
+        <div class="card p-3 mb-3">
+            <div>
+                @if (device.NickName is not null)
+                {
+                    <h3>@device.NickName</h3>
+                }
+                else
+                {
+                    <h3>Unnamed Device</h3>
+                }
+                <h5 class="mb-0">MAC Address: <br class="d-sm-none" /><code>@device.DeviceMac</code></h5>
+            </div>
+            <p class="my-1">
+                Detected IP: <br class="d-sm-none" /><code>@device.DetectedDeviceIpAddress</code><br />
+                Authorized Until: <br class="d-sm-none" /><code>@(!device.Authorized ? "Not Authorized" : device.AuthorizedUntil is null ? "Forever" : device.AuthorizedUntil.ToString()) UTC</code><br />
+
+                @if (device.DeviceNetwork is not null)
+                {
+                    <span>
+                        Network Group: <br class="d-sm-none" /><code>@networkGroupNamesByNetworkId.GetValueOrDefault(device.DeviceNetwork.NetworkId)</code><br />
+                        Network: <br class="d-sm-none" /><code>@networkNames.GetValueOrDefault(device.DeviceNetwork.NetworkId)</code><br />
+                    </span>
+                }
+            </p>
+
+            <div class="d-flex flex-column flex-sm-row justify-content-between mt-2">
+                <button class="btn btn-danger order-2 order-sm-1 mt-2 mt-sm-0" @onclick="@(async _ => {await Debounce(); await DeleteDevice(device); })" disabled="@debounce">Revoke Authorization</button>
+                <button class="btn btn-info order-1 order-sm-2" @onclick="@(async _ => {await Debounce(); nav.NavigateTo($"/user/device/{device.DeviceMac}");})" disabled="@debounce">Edit Device</button>
+            </div>
+        </div>
+    }
+
+    <div class="d-flex flex-column align-items-center mt-3 mb-2">
+        <nav>
+            <ul class="pagination mb-1">
+                <li class="page-item">
+                    <button class="@($"page-link{(page < 2 ? " disabled" : "")}")" disabled="@(debounce || page < 2)" @onclick="@(async _ => {await Debounce(); await PreviousPage();})">
+                        <span class="mdi mdi-arrow-left-thick"></span>
+                    </button>
+                </li>
+                <li class="page-item active" aria-current="page">
+                    <span class="page-link">@(page)</span>
+                </li>
+                <li class="page-item">
+                    <button class="@($"page-link{(page >= totalPages ? " disabled" : "")}")" disabled="@(debounce || page >= totalPages)" @onclick="@(async _ => {await Debounce(); await NextPage(); })">
+                        <span class="mdi mdi-arrow-right-thick"></span>
+                    </button>
+                </li>
+            </ul>
+        </nav>
+        <span>Showing @(Math.Min(count, ((page - 1) * take) + 1))-@(Math.Min(count, ((page - 1) * take) + take + 1)) of @(count) Devices</span>
+    </div>
+}
+
+@code {
+    [CascadingParameter]
+    public AuthenticateUser? AuthenticateUser { get; set; }
+
+    private string? newPassword;
+    private string? confirmPassword;
+    private string? passwordValidation;
+
+    private List<Database.Entities.Device> devices = new();
+    private Dictionary<int, string> networkGroupNamesByNetworkId = new();
+    private Dictionary<int, string> networkNames = new();
+
+    private int page = 1;
+    private int take = 10;
+    private int count = 0;
+    private int totalPages = 1;
+    private string? search;
+
+    private bool debounce = true;
+    public async Task Debounce()
+    {
+        debounce = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        dataRefresh.DeviceDetailsNotification += async (sender, eventArgs) =>
+        {
+            await Refresh();
+            await InvokeAsync(StateHasChanged);
+        };
+
+        await Refresh();
+        debounce = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Refresh()
+    {
+        if (AuthenticateUser?.AccessToken is null) return;
+
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        IQueryable<Database.Entities.Device> query = db.Devices
+            .AsNoTracking()
+            .Where(x => x.UserId == AuthenticateUser.AccessToken.UserId);
+
+        if (!String.IsNullOrWhiteSpace(search))
+        {
+            search = search.ToLower();
+            query = query
+                .Where(x =>
+                    (x.DeviceMac != null && x.DeviceMac.StartsWith(search)) ||
+                    (x.DetectedDeviceIpAddress != null && x.DetectedDeviceIpAddress.StartsWith(search)) ||
+                    (x.NickName != null && x.NickName.ToLower().Contains(search))
+                );
+        }
+
+        count = await query.CountAsync();
+
+        int skip = (page - 1) * take;
+        if (skip > count) skip = count;
+        totalPages = Convert.ToInt32(Math.Ceiling((float)count / (float)take));
+
+        devices = await query
+            .Include(x => x.DeviceNetwork)
+            .OrderBy(x => x.DeviceMac)
+            .Skip((page - 1) * take)
+            .Take(take)
+            .ToListAsync();
+
+        networkGroupNamesByNetworkId = (await db.Networks
+            .Select(x => new KeyValuePair<int, string>(x.Id, x.NetworkGroup.Name))
+            .ToListAsync())
+            .ToDictionary();
+
+        networkNames = (await db.Networks
+            .Select(x => new KeyValuePair<int, string>(x.Id, x.Name))
+            .ToListAsync())
+            .ToDictionary();
+    }
+
+    private async Task PreviousPage()
+    {
+        if (page <= 1) return;
+        page--;
+        await Refresh();
+        debounce = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task NextPage()
+    {
+        if (page >= totalPages) return;
+        page++;
+        await Refresh();
+        debounce = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task DoSearch()
+    {
+        await Refresh();
+        debounce = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private bool ValidatePassword()
+    {
+        if (string.IsNullOrWhiteSpace(newPassword))
+        {
+            passwordValidation = "Password must not be empty!";
+            return false;
+        }
+
+        if (newPassword.Length < 8)
+        {
+            passwordValidation = "Password must be at least 8 characters!";
+            return false;
+        }
+
+        if (newPassword != confirmPassword)
+        {
+            passwordValidation = "Passwords must match!";
+            return false;
+        }
+
+        passwordValidation = null;
+        return true;
+    }
+
+    private async Task ChangePasswordAsync()
+    {
+        if (AuthenticateUser?.AccessToken is null) return;
+        if (!ValidatePassword())
+        {
+            debounce = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        bool status = await webAuthService.SetPasswordAsync(AuthenticateUser.AccessToken.Email, newPassword);
+
+        if (!status)
+        {
+            passwordValidation = "Failed to set the new password. Please contact support!";
+            debounce = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        nav.NavigateTo("/logout");
+        return;
+    }
+
+    private async Task DeleteDevice(Database.Entities.Device device)
+    {
+        if (AuthenticateUser?.AccessToken is null) return;
+
+        using IronNacDbContext db = await dbFactory.CreateDbContextAsync();
+
+        await db.Devices
+            .Where(x => x.UserId == AuthenticateUser.AccessToken.UserId)
+            .Where(x => x.Id == device.Id)
+            .ExecuteDeleteAsync();
+
+        debounce = false;
+
+        dataRefresh.DeviceDetailsNotify();
+        dataRefresh.NetworkUsageNotify();
+
+        await disconnector.Disconnect(device);
+    }
+}

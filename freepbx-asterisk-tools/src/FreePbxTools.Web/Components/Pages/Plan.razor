@@ -1,0 +1,142 @@
+@page "/plan"
+@layout AuthenticatedLayout
+
+<PageTitle>CCS Bell Schedule - Plan</PageTitle>
+
+<div class="container">
+    <h2 class="text-center">
+        <iconify-icon icon="mdi:format-list-numbered" inline/>
+        Plan
+    </h2>
+
+    <EditForm Model="_settings.Staged.Plan">
+        <label class="form-label">Monday</label>
+        <InputSelect
+            class="form-select"
+            TValue="Guid?"
+            ValueExpression="@(() => _settings.Staged.Plan.Monday)"
+            Value="@(_settings.Staged.Plan.Monday)"
+            ValueChanged="@(v =>
+                          {
+                              _settings.Staged.Plan.Monday = v;
+                              _settings.CheckDirty();
+                          })">
+            <option value="">None</option>
+            @foreach (SettingsService.ScheduleModel schedule in _settings.Staged.Schedules)
+            {
+                <option value="@schedule.Id">@schedule.Name</option>
+            }
+        </InputSelect>
+
+        <label class="form-label mt-4">Tuesday</label>
+        <InputSelect
+            class="form-select"
+            TValue="Guid?"
+            ValueExpression="@(() => _settings.Staged.Plan.Tuesday)"
+            Value="@(_settings.Staged.Plan.Tuesday)"
+            ValueChanged="@(v =>
+                          {
+                              _settings.Staged.Plan.Tuesday = v;
+                              _settings.CheckDirty();
+                          })">
+            <option value="">None</option>
+            @foreach (SettingsService.ScheduleModel schedule in _settings.Staged.Schedules)
+            {
+                <option value="@schedule.Id">@schedule.Name</option>
+            }
+        </InputSelect>
+
+        <label class="form-label mt-4">Wednesday</label>
+        <InputSelect
+            class="form-select"
+            TValue="Guid?"
+            ValueExpression="@(() => _settings.Staged.Plan.Wednesday)"
+            Value="@(_settings.Staged.Plan.Wednesday)"
+            ValueChanged="@(v =>
+                          {
+                              _settings.Staged.Plan.Wednesday = v;
+                              _settings.CheckDirty();
+                          })">
+            <option value="">None</option>
+            @foreach (SettingsService.ScheduleModel schedule in _settings.Staged.Schedules)
+            {
+                <option value="@schedule.Id">@schedule.Name</option>
+            }
+        </InputSelect>
+
+        <label class="form-label mt-4">Thursday</label>
+        <InputSelect
+            class="form-select"
+            TValue="Guid?"
+            ValueExpression="@(() => _settings.Staged.Plan.Thursday)"
+            Value="@(_settings.Staged.Plan.Thursday)"
+            ValueChanged="@(v =>
+                          {
+                              _settings.Staged.Plan.Thursday = v;
+                              _settings.CheckDirty();
+                          })">
+            <option value="">None</option>
+            @foreach (SettingsService.ScheduleModel schedule in _settings.Staged.Schedules)
+            {
+                <option value="@schedule.Id">@schedule.Name</option>
+            }
+        </InputSelect>
+
+        <label class="form-label mt-4">Friday</label>
+        <InputSelect
+            class="form-select"
+            TValue="Guid?"
+            ValueExpression="@(() => _settings.Staged.Plan.Friday)"
+            Value="@(_settings.Staged.Plan.Friday)"
+            ValueChanged="@(v =>
+                          {
+                              _settings.Staged.Plan.Friday = v;
+                              _settings.CheckDirty();
+                          })">
+            <option value="">None</option>
+            @foreach (SettingsService.ScheduleModel schedule in _settings.Staged.Schedules)
+            {
+                <option value="@schedule.Id">@schedule.Name</option>
+            }
+        </InputSelect>
+
+        <label class="form-label mt-4">Saturday</label>
+        <InputSelect
+            class="form-select"
+            TValue="Guid?"
+            ValueExpression="@(() => _settings.Staged.Plan.Saturday)"
+            Value="@(_settings.Staged.Plan.Saturday)"
+            ValueChanged="@(v =>
+                          {
+                              _settings.Staged.Plan.Saturday = v;
+                              _settings.CheckDirty();
+                          })">
+            <option value="">None</option>
+            @foreach (SettingsService.ScheduleModel schedule in _settings.Staged.Schedules)
+            {
+                <option value="@schedule.Id">@schedule.Name</option>
+            }
+        </InputSelect>
+
+        <label class="form-label mt-4">Sunday</label>
+        <InputSelect
+            class="form-select"
+            TValue="Guid?"
+            ValueExpression="@(() => _settings.Staged.Plan.Sunday)"
+            Value="@(_settings.Staged.Plan.Sunday)"
+            ValueChanged="@(v =>
+                          {
+                              _settings.Staged.Plan.Sunday = v;
+                              _settings.CheckDirty();
+                          })">
+            <option value="">None</option>
+            @foreach (SettingsService.ScheduleModel schedule in _settings.Staged.Schedules)
+            {
+                <option value="@schedule.Id">@schedule.Name</option>
+            }
+        </InputSelect>
+    </EditForm>
+</div>
+
+@code {
+}

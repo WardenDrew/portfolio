@@ -1,0 +1,94 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+
+<nav class="navbar navbar-expand-md navbar-dark fixed-top bg-dark">
+    <div class="container-fluid">
+        <button 
+            class="navbar-toggler" 
+            type="button" 
+            data-bs-toggle="collapse" 
+            data-bs-target="#navbarCollapse" 
+            aria-controls="navbarCollapse" 
+            aria-expanded="false" 
+            aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav me-auto mb-2 mb-md-0">
+                @foreach (NavEntry navEntry in this.navEntries)
+                {
+                    <li class="nav-item text-center text-md-start ms-0 ms-md-2">
+                        <NavLink class="nav-link fs-5" href="@navEntry.Path" Match="NavLinkMatch.All">
+                            <iconify-icon icon="@navEntry.Icon" inline/>
+                            @navEntry.Name
+                            <hr />
+                        </NavLink>
+                    </li>
+                }
+            </ul>
+        </div>
+        <span>@($"{systemTime:ddd hh:mm tt}")</span>
+        <button class="btn @(_settings.IsDirty ? "btn-warning" : "") ms-2" disabled="@(!_settings.IsDirty)" @onclick="ApplyStaged">
+            <iconify-icon icon="mdi:content-save-move-outline" inline/>
+            @(_settings.IsDirty ? "Apply Staged Configuration" : "No Changes to Apply")
+        </button>
+        <button class="btn btn-outline-danger ms-2" href="/api/logout">
+            <iconify-icon icon="mdi:logout" inline/>
+            Logout
+        </button>
+    </div>
+</nav>
+<main style="margin-top: 100px">
+    @Body
+</main>
+
+@code {
+    private readonly CancellationTokenSource cts = new();
+    private Timer? systemTimeTimer;
+    private DateTime systemTime = DateTime.Now;
+
+    private record NavEntry(
+        string Path,
+        string Name,
+        string Icon
+    );
+    
+    private readonly List<NavEntry> navEntries = [
+        new("/", "Dashboard", "mdi:view-dashboard"),
+        new("/pagegroups", "Page Groups", "mdi:bullhorn"),
+        new("/schedules", "Schedules", "mdi:format-list-numbered"),
+        new("/plan", "Plan", "mdi:calendar-clock"),
+        new("/overrides", "Overrides", "mdi:calendar-alert"),
+        new("/configuration", "Configuration", "mdi:cog-clockwise"),
+    ];
+    
+    protected override void OnInitialized()
+    {
+        _settings.DirtyStateChanged += () =>
+        {
+            InvokeAsync(StateHasChanged);
+        };
+        _settings.CheckDirty();
+
+        systemTimeTimer = new Timer(_ =>
+        {
+            systemTime = DateTime.Now;
+            InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.Zero, TimeSpan.FromMilliseconds(100));
+    }
+    
+    private async Task ApplyStaged()
+    {
+        await _settings.ApplyStagedAsync(cts.Token);
+        _settings.CheckDirty();
+        _navigation.Refresh(true);
+    }
+    
+    public void Dispose()
+    {
+        cts.Cancel();
+        cts.Dispose();
+
+        systemTimeTimer?.Dispose();
+    }
+}
