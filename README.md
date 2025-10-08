@@ -56,7 +56,7 @@ Contributing database architecture changes to a legacy project, authorization an
 https://github.com/WardenDrew/portfolio/tree/main/unnamed-hris-project
 
 # VS Code Web Cluster
-A project for a school to dynamically build and host a cluster of VS Code web instances and provide persistent storage for students, allowing students to practice C# development while using Chromebooks.
+A project used while co-teaching a highschool programming course. It was used to dynamically build and host a cluster of VS Code web instances and provide persistent storage for students, allowing students to practice C# development while using Chromebooks.
 
 Showcases docker and devops work.
 
