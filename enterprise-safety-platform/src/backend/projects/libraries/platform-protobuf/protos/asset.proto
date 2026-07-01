@@ -1,0 +1,102 @@
+syntax = "proto3";
+option csharp_namespace = "Platform.Protobuf.Asset";
+package asset;
+
+service AssetApi {
+  rpc Status(StatusRequest)
+    returns (StatusResponse);
+
+  rpc DownloadRequest(DownloadRequestRequest) 
+    returns (DownloadRequestResponse);
+  
+  rpc UploadRequest(UploadRequestRequest)
+    returns (UploadRequestResponse);
+  
+  rpc Delete(DeleteRequest)
+    returns (DeleteResponse);
+
+  rpc Copy(CopyRequest)
+      returns (CopyResponse);
+  
+  rpc List(ListRequest)
+    returns (ListResponse);
+  
+  rpc Exists(ExistsRequest)
+    returns (ExistsResponse);
+}
+
+message AssetRequestHeader {
+  string key = 1;
+  string value = 2;
+}
+
+message AssetRequest {
+  int64 expires_at = 1;
+  string method = 2;
+  string uri = 3;
+  string body = 4;
+  repeated AssetRequestHeader headers = 6;
+}
+
+message StatusRequest {}
+message StatusResponse {
+  bool ready = 1;
+  string provider = 2;
+  string location = 3;
+}
+
+message DownloadRequestRequest {
+  string id = 1;
+}
+
+message DownloadRequestResponse {
+  string id = 1;
+  AssetRequest request = 2;
+}
+
+message UploadRequestRequest {
+  string id = 1;
+}
+
+message UploadRequestResponse {
+  string id = 1;
+  AssetRequest request = 2;
+}
+
+message DeleteRequest {
+  string id = 1;
+}
+
+message DeleteResponse {
+  string id = 1;
+  bool success = 2;
+}
+
+message CopyRequest {
+  string source_id = 1;
+  string target_id = 2;
+}
+
+message CopyResponse {
+  string source_id = 1;
+  string target_id = 21;
+  bool success = 3;
+}
+
+message ListRequest {
+  string continuationToken = 1;
+}
+
+message ListResponse {
+  string continuationToken = 1;
+  repeated string ids = 2;
+}
+
+message ExistsRequest {
+  string id = 1;
+}
+
+message ExistsResponse {
+  string id = 1;
+  bool exists = 2;
+}

@@ -1,4 +1,5 @@
 ﻿using CaptivePortal.Database.Entities;
+using CaptivePortal.Helpers;
 using CaptivePortal.Services.Outer;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -45,7 +46,7 @@ namespace CaptivePortal.Database
         {
             logger.LogInformation("Processing Database Seeding Data");
 
-            string initialPassword = "password";
+            string initialPassword = TemporaryPassword.Generate();
             User firstUser = new()
             {
                 Name = "Default Administrator",

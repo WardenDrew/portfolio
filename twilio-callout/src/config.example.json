@@ -1,0 +1,20 @@
+{
+  "voice": "Polly.Matthew",
+  "lang": "en-US",
+  "messages": {
+    "inbound": "Emergency callout received. Press any key to start the callout.",
+    "startCallout": "Please wait while the system contacts the response team.",
+    "agentJoin": "You are joining an emergency callout conference.",
+    "noAgents": "No response team members are currently configured."
+  },
+  "agents": [
+    {
+      "name": "PrimaryResponder",
+      "number": "+15555550100"
+    },
+    {
+      "name": "BackupResponder",
+      "number": "+15555550101"
+    }
+  ]
+}

@@ -9,7 +9,7 @@ if [[ -z "${USERNAME}" ]]; then
 fi
 
 if [[ -z "${PASSWORD}" ]]; then
-    export PASSWORD="vscoderocks";
+    export PASSWORD="CHANGE_ME";
 fi
 
 useradd -m -s /bin/bash "${USERNAME}"

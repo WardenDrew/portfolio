@@ -104,11 +104,11 @@ public class SettingsService(ILogger<SettingsService> logger)
 	
 	public class SettingsModel
     {
-    	public string Password { get; set; } = "changeme";
+	    public string Password { get; set; } = "CHANGE_ME";
     	public string AsteriskHost { get; set; } = "127.0.0.1";
     	public ushort AsteriskAmiPort { get; set; } = 5038;
-    	public string AsteriskAmiUsername { get; set; } = "amiuser";
-    	public string AsteriskAmiSecret { get; set; } = "amisecret";
+	    public string AsteriskAmiUsername { get; set; } = "CHANGE_ME";
+	    public string AsteriskAmiSecret { get; set; } = "CHANGE_ME";
     	
     	public List<PageGroupModel> PageGroups { get; set; } = new();
     	public List<ScheduleModel> Schedules { get; set; } = new();

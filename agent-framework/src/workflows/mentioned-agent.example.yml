@@ -1,0 +1,29 @@
+name: Mentioned Agent Dispatch
+
+on:
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created, edited]
+
+jobs:
+  route-mentioned-agent:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Detect requested agent
+        run: ./scripts/select-mentioned-agent.sh
+        env:
+          AGENT_ROUTING_CONFIG: .agents/routing.json
+
+      - name: Run selected agent
+        run: ./scripts/run-agent-task.sh
+        env:
+          AGENT_API_TOKEN: ${{ secrets.AGENT_API_TOKEN }}
+          AGENT_WORKSPACE_ID: ${{ vars.AGENT_WORKSPACE_ID }}
