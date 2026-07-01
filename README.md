@@ -28,8 +28,6 @@ the architecture, the public sample, and what was removed for confidentiality.
   assembling off-the-shelf SaaS tools.
 - I can lead projects that span software, IT operations, industrial systems,
   facilities, vendors, executives, and end users.
-- I can sanitize and communicate complex systems clearly enough for human
-  reviewers and AI-assisted hiring workflows without exposing private data.
 
 ## Skills Range
 
@@ -37,49 +35,22 @@ This portfolio demonstrates the through-lines from my professional experience.
 I take ambiguous or complex problems and break them apart into practical systems
 and solutions.
 
-- Languages and platforms: C#, .NET, ASP.NET Core, TypeScript, JavaScript,
-  Vue, Quasar, Blazor, SQL, shell scripting, Silk.NET/OpenGL.
-- Data and infrastructure: PostgreSQL, MySQL, MongoDB-style persistence,
-  InfluxDB, EF Core, MinIO/object storage, Docker, Docker Compose, reverse
-  proxies, containerized development environments.
-- Integration domains: industrial telemetry, network access control, PBX/page
-  systems, email ingestion, voice callout, encrypted collaboration, HRIS/safety
-  workflows, classroom development infrastructure, and agent-enabled tooling.
-- Enterprise IT operations: server, network, firewall, endpoint,
-  identity, remote access, Microsoft 365, AWS, backup, monitoring,
-  vulnerability assessment, incident triage, and infrastructure support.
-- CIO consulting: cybersecurity strategy,
-  disaster recovery planning, business continuity, infrastructure roadmaps,
-  vendor evaluation, technology upgrades, proactive monitoring programs, and
-  client-facing technical consulting.
-- Operations and facilities: Layer 3 networking, SCADA support, firewalling,
-  monitoring, backup/disaster recovery, access control, alarms, VoIP, campus
-  wireless, public water-system reporting, and physical infrastructure
-  coordination.
-
-## Architecture Signature
-
-The work in this portfolio is deliberately cross-domain. The common thread is
-turning messy operational constraints into software systems that can be
-deployed, maintained, secured, and explained.
-
-- Backend platform design in .NET and TypeScript: APIs, workers, persistence,
-  authentication, authorization, background jobs, data migration, and service
-  integration.
-- Security-aware systems: custom token handling, password hash migration,
-  generated permissions, ACL materialization, encrypted records, key wrapping,
-  request redaction, and secrets boundaries.
-- Protocol and integration work: Modbus-style collection, Influx line protocol,
-  RADIUS, DNS, Asterisk AMI, SMTP, Twilio Functions, AWS SES, gRPC, object
-  storage, and browser-based cryptography.
-- Frontend and workflow implementation in Quasar, Vue, Blazor, terminal UIs,
-  dashboards, admin tools, and constrained classroom/deployment surfaces.
-- DevOps and runtime packaging: Docker Compose, containerized development
-  environments, reverse-proxy-aware frontend builds, repeatable local stacks,
-  deployment scripts, and agent-ready repository templates.
-- Physical and operational systems: campus networks, access control, alarm and
-  notification workflows, facilities engineering, water-system compliance, and
-  project management across technical and non-technical stakeholders.
+- Languages and platforms: `C#`, `.NET`, `ASP.NET Core`, `TypeScript`, `JavaScript`,
+  `Vue`, `Quasar`, `Blazor`, `SQL`, `shell scripting`, `Silk.NET/OpenGL`.
+- Data and infrastructure: `PostgreSQL`, `MySQL`, `MongoDB`,
+  `InfluxDB`, `EF Core`, `MinIO`, `Docker`, `IaaS`, `Kubernetes`.
+- Integration domains: `industrial telemetry`, `network access control`, `PBX/page
+  systems`, `email ingestion`, `voice callout`, `encrypted collaboration`, `HRIS/safety
+  workflows`, `classroom development infrastructure`, and `agent-enabled tooling`.
+- Enterprise IT operations: `Server administration`, `Traditional AD Domains`, `network management`, `firewall management`, `endpoint support`,
+  `identity`, `remote access`, `Microsoft 365`, `AWS`, `backups`, `monitoring`,
+  `vulnerability assessment`, `incident triage`, and `infrastructure support`.
+- CIO consulting: `cybersecurity strategy`,
+  `disaster recovery planning`, `business continuity`, `infrastructure roadmaps`,
+  `vendor evaluation`, `technology upgrades`, `proactive monitoring`, and
+  `client-facing technical consulting`.
+- Operations and facilities: `SCADA`, `access control`, `alarms`, `VoIP`, `campus
+  wireless`, `facilities management`, and `project coordination`.
 
 ## Coding Projects
 
